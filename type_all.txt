@@ -1,0 +1,12 @@
+TimeMarker, 0
+StartMarker, 0
+Host, 0
+SrcSinkObject, 683132
+Principal, 20
+Subject, 398658
+Event, 3533638
+FileObject, 55736
+NetFlowObject, 25123
+MemoryObject, 107768
+UnnamedPipeObject, 1695
+UnitDependency, 194218
