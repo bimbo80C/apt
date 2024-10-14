@@ -8,9 +8,9 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from attr_graph import GCNEncoder
-import torch
-from torch_geometric.nn import global_mean_pool
+# from attr_graph import GCNEncoder
+# import torch
+# from torch_geometric.nn import global_mean_pool
 
 metadata = {
     'trace': {
@@ -651,7 +651,7 @@ if __name__ == '__main__':
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
 
-    # preprocess(dataset)
+    preprocess(dataset)
     find_entity_pair(dataset)
     # test(dataset)
     # attr_graph_construction(dataset)

@@ -8,7 +8,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from attr_graph import GCNEncoder
+# from attr_graph import GCNEncoder
 import torch
 import pickle
 
