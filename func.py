@@ -317,21 +317,38 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
             event_uuid = event_pair['event']
             src_uuid = event_pair['src']
             dst_uuid = event_pair['dst']
-
+            print(event_uuid)
+            print(src_uuid)
+            uuids = [event_uuid,src_uuid, dst_uuid ]
             # 构建节点和边字典
             nodes_dict = {}
             edges_dict = {}
-
+            new_node_dict = {}
+            new_edges_dict = {}
+            cnt_node = 0
+            cnt_src_num = 0
             src_record = id_entity_map[src_uuid]
             dst_record = id_entity_map[dst_uuid]
+            for _ in uuids:
+            # 首先处理Subject - Subject的节点对
+                if src_record == 'Subject' and dst_record== 'Subject':
+                    node_attrs = uuid_to_node_attrs[_]
+                    # 添加节点和该uuid的连接
+                    for attr_name, attr_value in node_attrs.items():
+                        nodes_dict[cnt_node] = {attr_name: attr_value}
+                        cnt_node += 1
+                        # if cnt_node <= 5:
+                        #     # 插入打印结果
+                        #     print(f"属性名称: {attr_name}, 属性值: {attr_value}")
+                        #     print(f"当前节点索引: {cnt_node}, 更新后的 nodes_dict: {nodes_dict}")
+                        #     continue
+                        # assert 1==0
 
-            if src_record == 'Subject' and dst_record== 'Subject':
-                node_attrs = uuid_to_node_attrs[src_uuid]
-                for attr_name, attr_value in node_attrs.items():
-                    nodes_dict[cnt_node] = {attr_name: attr_value}
-                    cnt_node += 1
-                for i in range(cnt_src_num + 1, cnt_node):
-                    edges_dict[(cnt_src_num, i)] = None
+                    # 建立该节点与属性节点的边
+                    for i in range(cnt_src_num + 1, cnt_node):
+                        edges_dict[(cnt_src_num, i)] = None
+            # TODO 建立每一个节点之间联系的边
+
             print(nodes_dict.items())
             G.add_nodes_from(nodes_dict.items())
             G.add_edges_from(edges_dict.keys())
@@ -407,7 +424,33 @@ def attr_graph_construction(dataset):
                 # 建立一个uuid和节点属性的映射 uuid_to_node_attrs
             for node_attrs in sub_node_attr_list:
                 uuid = node_attrs['uuid']
-                uuid_to_node_attrs[uuid] = node_attrs 
+                uuid_to_node_attrs[uuid] = node_attrs
+    # uuid_to_node_attrs 表加入 attr_event
+    if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
+        with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as fw_event_sub:
+            sub_node_attr_list = []
+            for attr in tqdm(fw_event_sub.readlines()):
+                # subject attribute
+                attr_values = attr.strip().split('\t')
+                node_attrs = {                                 
+                    'uuid': attr_values[0],
+                    'record': attr_values[1],
+                    'event_type': attr_values[2],
+                    'seq': attr_values[3],
+                    'thread_id': attr_values[4],
+                    'src': attr_values[5],
+                    'dst1': attr_values[6],
+                    'dst2': attr_values[7],
+                    'size': attr_values[8],
+                    'time': attr_values[9],
+                }
+                sub_node_attr_list.append(node_attrs)
+                # sub_node_attr_list 存放了全部的subject的attr
+                # 建立一个uuid和节点属性的映射 uuid_to_node_attrs
+            for node_attrs in sub_node_attr_list:
+                uuid = node_attrs['uuid']
+                uuid_to_node_attrs[uuid] = node_attrs
+
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             print('loading id_entity_map')
@@ -662,8 +705,8 @@ if __name__ == '__main__':
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
 
-    preprocess(dataset)
-    find_entity_pair(dataset)
+    # preprocess(dataset)
+    # find_entity_pair(dataset)
     # test(dataset)
-    # attr_graph_construction(dataset)
+    attr_graph_construction(dataset)
     # print(find_bining_max_value(dataset, 'SrcSinkObject'))
