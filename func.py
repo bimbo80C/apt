@@ -93,11 +93,11 @@ name_map = {
 ###############
 def preprocess(dataset):
     id_entity_map = {}
-    for file in os.listdir('./dataset/{}/'.format(dataset)):
-        if 'json' in file and 'entity' not in file and '5' not in file and '6' not in file:
+    for file in os.listdir('./dataset/{}/'.format(dataset)):  #file ta1-trace-e3-official-1.json except 5 & 6 for testing
+        if 'json' in file and 'entity' not in file and '5' not in file and '6' not in file: 
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
-            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
+            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8') #attr_src.txt 
             fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
             fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
             fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
@@ -112,7 +112,7 @@ def preprocess(dataset):
                 if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
                 uuid = pattern_uuid.findall(line)[0]
                 record = pattern_record.findall(line)[0]
-                id_entity_map[uuid] = record
+                id_entity_map[uuid] = record # all training dataset data
                 if record == 'SrcSinkObject':
                     epoch = pid = fileDescriptor = 'null'
                     if len(pattern_epoch.findall(line)) > 0:
@@ -254,19 +254,20 @@ def preprocess(dataset):
 
 # 找出所有的节点对
 def find_entity_pair(dataset):
-    record_cnt_map = {}  # 记录evnet,src和dst这些的数字编号(uuid,cnt)
+    record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
     entity_cnt = 0
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
     for file in os.listdir('./dataset/{}/'.format(dataset)):
-        if 'event' in file:
+        if 'event' in file:   # attr_event.txt
             fw_entity_pair = open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', 'w', encoding='utf-8')
             print('searching behavior entity pair {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'r', encoding='utf-8')
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
+                # E87FB82D-6375-C469-6974-AACF2B7F1700	Event	EVENT_RECVMSG	36	412	753366C8-7B00-E70F-1E95-2102227BD6E1	39E846F3-D581-6BBB-4CE1-E7E43D356616	null	8	1523627788470000000
                 if uuid not in record_cnt_map:
                     record_cnt_map[uuid] = entity_cnt
                     entity_cnt += 1
@@ -280,6 +281,8 @@ def find_entity_pair(dataset):
                     entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
                         record_cnt_map[dst1]) + '\n'
                     fw_entity_pair.write(entity_pair)
+                    # entity_pair 存放的是 event src dst 的 编号
+                    # record_cnt_map 存放的是 uuid - cnt
                 if dst2 in id_entity_map:
                     if dst2 not in record_cnt_map:
                         record_cnt_map[dst2] = entity_cnt
@@ -290,14 +293,19 @@ def find_entity_pair(dataset):
 
                 # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:注意一下这个顺序
             fw_entity_pair.close()
+
+            # finish the entity_pair.txt 
     if len(record_cnt_map) != 0:
         fw_record_cnt_map = open('./dataset/{}/'.format(dataset) + 'record_cnt_map.json', 'w', encoding='utf-8')
         json.dump(record_cnt_map, fw_record_cnt_map)
         fw_record_cnt_map.close()
+        # finish the record_map.txt
         cnt_record_map= {str(v): k for k, v in record_cnt_map.items()}
+        # reverse
         fw_cnt_record_map= open('./dataset/{}/'.format(dataset) + 'cnt_record_map.json', 'w', encoding='utf-8')
         json.dump(cnt_record_map, fw_cnt_record_map)
         fw_cnt_record_map.close()
+        # finish the count_record.txt
 # event_list={{},..,{}}
 def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id_entity_map, batch_size=1000):
     for batch_start in tqdm(range(0, len(event_list), batch_size), desc='Processing batches'):
@@ -337,7 +345,7 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
 
             batch_graphs.append(G)
             batch_embeddings.append(graph_embedding)
-        yield batch_graphs, batch_embeddings
+    
 
 
 def test(dataset, record_cnt_map=None, entity_pair=None):
@@ -381,6 +389,7 @@ def attr_graph_construction(dataset):
         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_attr_sub:
             sub_node_attr_list = []
             for attr in tqdm(f_attr_sub.readlines()):
+                # subject attribute
                 attr_values = attr.strip().split('\t')
                 node_attrs = {
                     'uuid': attr_values[0],
@@ -394,10 +403,11 @@ def attr_graph_construction(dataset):
                     'cmdline': attr_values[8]
                 }
                 sub_node_attr_list.append(node_attrs)
-                # 建立一个uuid和节点属性的映射
+                # sub_node_attr_list 存放了全部的subject的attr
+                # 建立一个uuid和节点属性的映射 uuid_to_node_attrs
             for node_attrs in sub_node_attr_list:
                 uuid = node_attrs['uuid']
-                uuid_to_node_attrs[uuid] = node_attrs
+                uuid_to_node_attrs[uuid] = node_attrs 
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             print('loading id_entity_map')
@@ -406,10 +416,10 @@ def attr_graph_construction(dataset):
         with open('./dataset/{}/cnt_record_map.json'.format(dataset), 'r', encoding='utf-8') as f_cnt_record_map:
             print('loading cnt_record_map')
             cnt_record_map = json.load(f_cnt_record_map)
-    if os.path.exists('./dataset/{}/record_cnt_map.json'.format(dataset)):
-        with open('./dataset/{}/record_cnt_map.json'.format(dataset), 'r', encoding='utf-8') as f_record_cnt_map:
-            print('loading record_cnt_map')
-            record_cnt_map = json.load(f_record_cnt_map)
+    # if os.path.exists('./dataset/{}/record_cnt_map.json'.format(dataset)):
+    #     with open('./dataset/{}/record_cnt_map.json'.format(dataset), 'r', encoding='utf-8') as f_record_cnt_map:
+    #         print('loading record_cnt_map')
+    #         record_cnt_map = json.load(f_record_cnt_map)
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
             print('loading event_list')
@@ -421,8 +431,9 @@ def attr_graph_construction(dataset):
                     'src': cnt_record_map[event[1]],
                     'dst': cnt_record_map[event[2]],
                 }
+                ## event_list 只存放src和dst都是Subject的节点对
                 if id_entity_map[entity_pair['src']] == 'Subject' and id_entity_map[entity_pair['dst']] == 'Subject':
-                    event_list.append(entity_pair)
+                    event_list.append(entity_pair) 
 
     graph_generator = generate_graphs_in_batches(event_list, cnt_record_map,uuid_to_node_attrs, id_entity_map)
     graph_list = []
