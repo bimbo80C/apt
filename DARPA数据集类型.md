@@ -43,5 +43,6 @@ uuid record principal_type user_id group_ids euid
 **attr_event.txt**
 uuid    record  event_type      seq     thread_id       src     dst1    dst2    size    time
 E87FB82D-6375-C469-6974-AACF2B7F1700	Event	EVENT_RECVMSG	36	412	753366C8-7B00-E70F-1E95-2102227BD6E1	39E846F3-D581-6BBB-4CE1-E7E43D356616	null	8	1523627788470000000
+
 **attr_memory.txt**
 C59FDA4A-09AF-F266-2E98-4704395E4424	MemoryObject	null	140540332916736	3247	4096

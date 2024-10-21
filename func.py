@@ -312,6 +312,8 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
         batch_event_pairs = event_list[batch_start:batch_start + batch_size]  # 本批次需要处理的event
         batch_graphs = []
         batch_embeddings = []
+        new_edges_dict = {}
+        whole_G = nx.Graph()
         for event_pair in batch_event_pairs:
             G = nx.Graph()
             event_uuid = event_pair['event']
@@ -324,8 +326,9 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
             nodes_dict = {}
             edges_dict = {}
             new_node_dict = {}
-            new_edges_dict = {}
+            
             cnt_node = 0
+            cnt_edge = 0
             cnt_src_num = 0
             src_record = id_entity_map[src_uuid]
             dst_record = id_entity_map[dst_uuid]
@@ -335,8 +338,12 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
                     node_attrs = uuid_to_node_attrs[_]
                     # 添加节点和该uuid的连接
                     for attr_name, attr_value in node_attrs.items():
+                        NODE_ATTR = 9
+                        if cnt_node % NODE_ATTR == 0:
+                            new_node_dict[cnt_node / NODE_ATTR] = {attr_name: attr_value}
                         nodes_dict[cnt_node] = {attr_name: attr_value}
                         cnt_node += 1
+
                         # if cnt_node <= 5:
                         #     # 插入打印结果
                         #     print(f"属性名称: {attr_name}, 属性值: {attr_value}")
@@ -348,11 +355,21 @@ def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id
                     for i in range(cnt_src_num + 1, cnt_node):
                         edges_dict[(cnt_src_num, i)] = None
             # TODO 建立每一个节点之间联系的边
-
+            # for event_pair2 in batch_event_pairs:
+            #     event_uuid2 = event_pair['event']
+            #     src_uuid2 = event_pair['src']
+            #     ## 1 2 3
+            #     ## 4 3 5
+ 
+            #     ##
+            #     if dst_uuid == src_uuid2:
+            #         new_edges_dict[cnt_edge] = {event_uuid,event_uuid2}
+            #         cnt_edge +=1
             print(nodes_dict.items())
             G.add_nodes_from(nodes_dict.items())
             G.add_edges_from(edges_dict.keys())
-
+            whole_G.add_nodes_from(new_node_dict.items())
+            whole_G.add_edges_from(new_edges_dict.items())
             # 编码和池化聚合
             node_features = torch.tensor([list(v.values()) for v in nodes_dict.values()], dtype=torch.float)
             edge_index = torch.tensor([[k[0], k[1]] for k in edges_dict.keys()], dtype=torch.long).t()
@@ -495,77 +512,7 @@ def attr_graph_construction(dataset):
     return graph_list, graph_embedding_list
 
 
-# 对每个节点对进行处理，构建子图
-# 从event读出src和dst,匹配两者类型，去相应文件读取属性，将节点相连
-# uuid_to_node_attrs是uuid对应其attr字典的字典
-# def attr_graph_construction(dataset):
-#     graph_list = []
-#     event_list = []
-#     cnt_node = 0
-#     uuid_to_node_attrs = {}
-#     if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_attr_sub:
-#             sub_node_attr_list = []
-#             for attr in tqdm(f_attr_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 node_attrs = {
-#                     'uuid': attr_values[0],
-#                     'record': attr_values[1],
-#                     'subject_type': attr_values[2],
-#                     'parent': attr_values[3],
-#                     'local_principal': attr_values[4],
-#                     'cid': attr_values[5],
-#                     'start_time': attr_values[6],
-#                     'unit_id': attr_values[7],
-#                     'cmdline': attr_values[8]
-#                 }
-#                 sub_node_attr_list.append(node_attrs)
-#             for node_attrs in sub_node_attr_list:
-#                 uuid = node_attrs['uuid']
-#                 uuid_to_node_attrs[uuid] = node_attrs
-#     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
-#         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
-#             print('loading id_entity_map')
-#             id_entity_map = json.load(f_id_entity_map)
-#     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
-#         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
-#             print('loading event_list')
-#             for line in f.readlines():
-#                 event = line.strip().split('\t')
-#                 entity_pair = {
-#                     'event_uuid': event[0],
-#                     'src_uuid': event[1],
-#                     'dst_uuid': event[2],
-#                 }
-#                 if entity_pair['src_uuid'] not in id_entity_map or entity_pair['dst_uuid'] not in id_entity_map:
-#                     continue
-#                 else:
-#                     event_list.append(entity_pair)
-#     for event_pair in tqdm(event_list):
-#         G = nx.Graph()
-#         event_uuid = entity_pair['event_uuid']
-#         src_uuid = entity_pair['src_uuid']
-#         dst_uuid = entity_pair['dst_uuid']
-#         # src和dst共同构成子图
-#         src_record = id_entity_map[src_uuid]
-#         dst_record = id_entity_map[dst_uuid]
-#         nodes_dict = {}
-#         edges_dict = {}
-#         # 加一段代码统计src，dst类型情况
-#         if src_record == 'Subject':
-#             cnt_src_num = cnt_node
-#             node_attrs = uuid_to_node_attrs[src_uuid]
-#             for attr_name, attr_value in node_attrs.items():
-#                 nodes_dict[cnt_node] = {attr_name: attr_value}
-#                 cnt_node += 1
-#             for i in range(cnt_src_num + 1, cnt_node):
-#                 edges_dict[(cnt_src_num, i)] = None
-#             G.add_nodes_from(nodes_dict.items())
-#             G.add_edges_from(edges_dict.keys())
-#             graph_list.append(G)
-#             # print(G)
-#             # yield G
-#             del G
+
 
 def count_frequency(numbers):
     return collections.Counter(numbers)
