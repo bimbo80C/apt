@@ -307,76 +307,76 @@ def find_entity_pair(dataset):
         # finish the count_record.txt
 # event_list={{},..,{}}
 
-def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id_entity_map, batch_size=1000):
-    for batch_start in tqdm(range(0, len(event_list), batch_size), desc='Processing batches'):
-        batch_event_pairs = event_list[batch_start:batch_start + batch_size]  # 本批次需要处理的event
-        batch_graphs = []
-        batch_embeddings = []
-        new_edges_dict = {}
-        whole_G = nx.Graph()
-        for event_pair in batch_event_pairs:
-            G = nx.Graph()
-            event_uuid = event_pair['event']
-            src_uuid = event_pair['src']
-            dst_uuid = event_pair['dst']
-            print(event_uuid)
-            print(src_uuid)
-            uuids = [event_uuid,src_uuid, dst_uuid ]
-            # 构建节点和边字典
-            nodes_dict = {}
-            edges_dict = {}
-            cnt_node = 0
-            cnt_edge = 0
-            cnt_src_num = 0
-            src_record = id_entity_map[src_uuid]
-            dst_record = id_entity_map[dst_uuid]
-            for _ in uuids:
-            # 首先处理Subject - Subject的节点对
-                if src_record == 'Subject' and dst_record== 'Subject':
-                    node_attrs = uuid_to_node_attrs[_]
-                    # 添加节点和该uuid的连接
-                    for attr_name, attr_value in node_attrs.items():
-                        NODE_ATTR = 9
-                        if cnt_node % NODE_ATTR == 0:
-                            new_node_dict[cnt_node / NODE_ATTR] = {attr_name: attr_value}
-                        nodes_dict[cnt_node] = {attr_name: attr_value}
-                        cnt_node += 1
+# def generate_graphs_in_batches(event_list,cnt_record_map, uuid_to_node_attrs, id_entity_map, batch_size=1000):
+#     for batch_start in tqdm(range(0, len(event_list), batch_size), desc='Processing batches'):
+#         batch_event_pairs = event_list[batch_start:batch_start + batch_size]  # 本批次需要处理的event
+#         batch_graphs = []
+#         batch_embeddings = []
+#         new_edges_dict = {}
+#         whole_G = nx.Graph()
+#         for event_pair in batch_event_pairs:
+#             G = nx.Graph()
+#             event_uuid = event_pair['event']
+#             src_uuid = event_pair['src']
+#             dst_uuid = event_pair['dst']
+#             print(event_uuid)
+#             print(src_uuid)
+#             uuids = [event_uuid,src_uuid, dst_uuid ]
+#             # 构建节点和边字典
+#             nodes_dict = {}
+#             edges_dict = {}
+#             cnt_node = 0
+#             cnt_edge = 0
+#             cnt_src_num = 0
+#             src_record = id_entity_map[src_uuid]
+#             dst_record = id_entity_map[dst_uuid]
+#             for _ in uuids:
+#             # 首先处理Subject - Subject的节点对
+#                 if src_record == 'Subject' and dst_record== 'Subject':
+#                     node_attrs = uuid_to_node_attrs[_]
+#                     # 添加节点和该uuid的连接
+#                     for attr_name, attr_value in node_attrs.items():
+#                         NODE_ATTR = 9
+#                         if cnt_node % NODE_ATTR == 0:
+#                             new_node_dict[cnt_node / NODE_ATTR] = {attr_name: attr_value}
+#                         nodes_dict[cnt_node] = {attr_name: attr_value}
+#                         cnt_node += 1
 
-                        # if cnt_node <= 5:
-                        #     # 插入打印结果
-                        #     print(f"属性名称: {attr_name}, 属性值: {attr_value}")
-                        #     print(f"当前节点索引: {cnt_node}, 更新后的 nodes_dict: {nodes_dict}")
-                        #     continue
-                        # assert 1==0
+#                         # if cnt_node <= 5:
+#                         #     # 插入打印结果
+#                         #     print(f"属性名称: {attr_name}, 属性值: {attr_value}")
+#                         #     print(f"当前节点索引: {cnt_node}, 更新后的 nodes_dict: {nodes_dict}")
+#                         #     continue
+#                         # assert 1==0
 
-                    # 建立该节点与属性节点的边
-                    for i in range(cnt_src_num + 1, cnt_node):
-                        edges_dict[(cnt_src_num, i)] = None
-            # TODO 建立每一个节点之间联系的边
-            for event_pair2 in batch_event_pairs:
-                event_uuid2 = event_pair['event']
-                src_uuid2 = event_pair['src']
-                ## 1 2 3
-                ## 4 3 5
+#                     # 建立该节点与属性节点的边
+#                     for i in range(cnt_src_num + 1, cnt_node):
+#                         edges_dict[(cnt_src_num, i)] = None
+#             # TODO 建立每一个节点之间联系的边
+#             for event_pair2 in batch_event_pairs:
+#                 event_uuid2 = event_pair['event']
+#                 src_uuid2 = event_pair['src']
+#                 ## 1 2 3
+#                 ## 4 3 5
  
-                ##
-                if dst_uuid == src_uuid2:
-                    new_edges_dict[cnt_edge] = {event_uuid,event_uuid2}
-                    cnt_edge +=1
-            print(nodes_dict.items())
-            G.add_nodes_from(nodes_dict.items())
-            G.add_edges_from(edges_dict.keys())
-            whole_G.add_nodes_from(new_node_dict.items())
-            whole_G.add_edges_from(new_edges_dict.keys())
-            # 编码和池化聚合
-            node_features = torch.tensor([list(v.values()) for v in nodes_dict.values()], dtype=torch.float)
-            edge_index = torch.tensor([[k[0], k[1]] for k in edges_dict.keys()], dtype=torch.long).t()
+#                 ##
+#                 if dst_uuid == src_uuid2:
+#                     new_edges_dict[cnt_edge] = {event_uuid,event_uuid2}
+#                     cnt_edge +=1
+#             print(nodes_dict.items())
+#             G.add_nodes_from(nodes_dict.items())
+#             G.add_edges_from(edges_dict.keys())
+#             whole_G.add_nodes_from(new_node_dict.items())
+#             whole_G.add_edges_from(new_edges_dict.keys())
+#             # 编码和池化聚合
+#             node_features = torch.tensor([list(v.values()) for v in nodes_dict.values()], dtype=torch.float)
+#             edge_index = torch.tensor([[k[0], k[1]] for k in edges_dict.keys()], dtype=torch.long).t()
 
-            encoder = GCNEncoder(node_features.shape[1], 32, 64)
-            graph_embedding = global_mean_pool(encoder(node_features, edge_index), torch.tensor([0] * len(nodes_dict)))
+#             encoder = GCNEncoder(node_features.shape[1], 32, 64)
+#             graph_embedding = global_mean_pool(encoder(node_features, edge_index), torch.tensor([0] * len(nodes_dict)))
 
-            batch_graphs.append(G)
-            batch_embeddings.append(graph_embedding)
+#             batch_graphs.append(G)
+#             batch_embeddings.append(graph_embedding)
     
 
 
@@ -410,16 +410,8 @@ def test(dataset, record_cnt_map=None, entity_pair=None):
     for entity_pair, count in entity_pair_counts.items():
         print(f"entity_pair: {entity_pair}, count: {count}")
 
-# 构建节点属性图
-def graph_node_construction(dataset,G,uuid_to_node_attrs):
-    subject_attr_num = 0
-    file_attr_num = 0
-    network_attr_num = 0
-    mem_attr_num = 0
-    SUBJECT_ATTR = 9
-    FILE_ATTR = 6
-    NETWORK_ATTR = 8
-    MEM_ATTR = 6
+# 构建节点属性图,并且将子图以uuid的形式加入整图G当中
+def get_attrs(dataset,uuid_to_node_attrs,uuid_to_edge_attrs):
     if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_attr_sub:
             for attr in tqdm(f_attr_sub.readlines()):
@@ -435,11 +427,8 @@ def graph_node_construction(dataset,G,uuid_to_node_attrs):
                     'unit_id': attr_values[7],
                     'cmdline': attr_values[8]
                 }
-                subject_attr_num += SUBJECT_ATTR
                 uuid = node_attrs['uuid']
                 uuid_to_node_attrs[uuid] = node_attrs
-                G.add_node(node_attrs['uuid'], **node_attrs)
-
 
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as fw_file_sub:
@@ -454,11 +443,9 @@ def graph_node_construction(dataset,G,uuid_to_node_attrs):
                     'permission': attr_values[4],
                     'path': attr_values[5]
                 }
-                file_attr_num += FILE_ATTR
                 uuid = node_attrs['uuid']
                 uuid_to_node_attrs[uuid] = node_attrs
-                G.add_node(node_attrs['uuid'], **node_attrs)
-
+              
 
     if os.path.exists('./dataset/{}/attr_network.txt'.format(dataset)):
         with open('./dataset/{}/attr_network.txt'.format(dataset), 'r', encoding='utf-8') as fw_network_sub:
@@ -475,11 +462,8 @@ def graph_node_construction(dataset,G,uuid_to_node_attrs):
                     'remote_port': attr_values[6],
                     'ip_protocol': attr_values[7]
                 }
-                network_attr_num += NETWORK_ATTR
                 uuid = node_attrs['uuid']
                 uuid_to_node_attrs[uuid] = node_attrs
-                G.add_node(node_attrs['uuid'], **node_attrs)
-
     
     if os.path.exists('./dataset/{}/attr_mem.txt'.format(dataset)):
         with open('./dataset/{}/attr_mem.txt'.format(dataset), 'r', encoding='utf-8') as f_mem_sub:
@@ -494,17 +478,27 @@ def graph_node_construction(dataset,G,uuid_to_node_attrs):
                     'tgid': attr_values[4],
                     'size': attr_values[5]
                 }
-                mem_attr_num += MEM_ATTR
                 uuid = node_attrs['uuid']
                 uuid_to_node_attrs[uuid] = node_attrs
-                G.add_node(node_attrs['uuid'], **node_attrs)
+    
+    if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
+        with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event_sub:
+            for attr in tqdm(f_event_sub.readlines()):
+                attr_values = attr.strip().split('\t')
+                # uuid	record	event_type	seq	thread_id	src	dst1	dst2	size	time
+                edge_attrs = {
+                    'record': attr_values[1],
+                    'event_type': attr_values[2],
+                    'seq': attr_values[3],
+                    'thread_id': attr_values[4],
+                    'size': attr_values[8],
+                    'time': attr_values[9],
+                }
+                uuid = attr_values[0]
+                uuid_to_edge_attrs[uuid] = edge_attrs
     return
 
-
-
-
-def graph_edge_construction(dataset,G,uuid_to_node_attrs,event_list):
-    edges_dict = {}
+def get_maps(dataset,id_entity_map,cnt_record_map):
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             print('loading id_entity_map')
@@ -513,6 +507,8 @@ def graph_edge_construction(dataset,G,uuid_to_node_attrs,event_list):
         with open('./dataset/{}/cnt_record_map.json'.format(dataset), 'r', encoding='utf-8') as f_cnt_record_map:
             print('loading cnt_record_map')
             cnt_record_map = json.load(f_cnt_record_map)
+
+def graph_node_construction(dataset,graph_list,uuid_to_node_attrs,uuid_to_edge_attrs,id_entity_map,cnt_record_map):
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
             print('loading event_list')
@@ -525,34 +521,87 @@ def graph_edge_construction(dataset,G,uuid_to_node_attrs,event_list):
                 }
                 attr_dict = ['Event','Subject','FileObject','NetFlowObject','MemoryObject']
                 if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
-                    edges_dict[(entity_pair['src'], entity_pair['dst'])] = None
-    G.add_edges_from(edges_dict.keys())
+                    event_uuid = entity_pair['event']
+                    src_uuid = entity_pair['src']
+                    dst_uuid = entity_pair['dst']
+                    event_attr = uuid_to_edge_attrs[event_uuid]
+                    src_attr = uuid_to_node_attrs[src_uuid]
+                    dst_attr = uuid_to_node_attrs[dst_uuid]
+                    sub_G = nx.DiGraph()
+                    sub_nodes_dict = {}
+                    sub_edges_dict = {}
+                    cnt_node = 0
+                    for attr_name,attr_value in src_attr.items():
+                        sub_nodes_dict[cnt_node] = attr_name + str(':') + attr_value
+                        cnt_node +=1
+                        if attr_name != 'uuid':
+                            sub_edges_dict[(str('uuid:')+src_uuid, attr_name + str(':') + attr_value)] = None
+                        
+                    for attr_name, attr_value in dst_attr.items():
+                        sub_nodes_dict[cnt_node] = attr_name + str(':') + attr_value
+                        cnt_node +=1
+                        if attr_name != 'uuid':
+                            sub_edges_dict[(str('uuid:')+dst_uuid, attr_name + str(':') + attr_value)] = None
+                    sub_edges_dict[(str('uuid:')+src_uuid,str('uuid:')+dst_uuid)] = event_attr
+                    sub_G.add_nodes_from(sub_nodes_dict.values())
+                    sub_G.add_edges_from(sub_edges_dict.keys())
+                    graph_list.append(sub_G)
+    return
+
+
+def graph_node_embedding(graph_list):
+    for graph in graph_list:
+        for node in graph.nodes():
+            print(node)
+    return
+
+# 将节点对整体之外的边添加到图中
+def graph_edge_construction(dataset,edges_set,cnt_record_map):
+    if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
+        with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
+            print('loading event_list')
+            lines = f.readlines()
+            for i in range(len(lines)):
+                line_i = lines[i].strip().split('\t') 
+                for j in range(i + 1, len(lines)):
+                    line_j = lines[j].strip().split('\t')
+                    if line_i[2] == line_j[1]:
+                        edges_set.add((cnt_record_map[line_i[0]], cnt_record_map[line_j[0]]))
     return
 # 对每个节点对进行处理，构建子图
 # 从event读出src和dst,匹配两者类型，去相应文件读取属性，将节点相连
 # 先尝试建立所有subject事件对
 def graph_construction(dataset):
     G = nx.Graph()
-    uuid_to_node_attrs = {}
-    event_list = []
+    edges_set = set()
     graph_list = []
-    graph_node_construction(dataset,G,uuid_to_node_attrs)
-    graph_edge_construction(dataset,G,uuid_to_node_attrs,event_list)
-    # 创建好正常图
-    graph_generator = generate_graphs_in_batches(event_list, cnt_record_map,uuid_to_node_attrs, id_entity_map)
     graph_embedding_list = []
-    for batch_graphs, batch_embeddings in tqdm(graph_generator, total=len(event_list) // 1000,
-                                               desc='Collecting graphs'):
-        graph_list.extend(batch_graphs)
-        graph_embedding_list.extend(batch_embeddings)
-    print("First 5 graphs in graph_list:")
-    for graph in graph_list[:5]:
-        print(graph)
-
-    print("\nFirst 5 embeddings in graph_embedding_list:")
-    for embedding in graph_embedding_list[:5]:
-        print(embedding)
+    uuid_to_node_attrs = {}
+    uuid_to_edge_attrs = {}
+    id_entity_map = {}
+    cnt_record_map = {}
+    get_attrs(dataset,uuid_to_node_attrs,uuid_to_edge_attrs)
+    get_maps(dataset,id_entity_map,cnt_record_map)
+    graph_node_construction(dataset,graph_list,uuid_to_node_attrs,uuid_to_edge_attrs,id_entity_map,cnt_record_map)
+    graph_node_embedding(graph_list)
+    graph_edge_construction(dataset,edges_set,cnt_record_map)
+    G.add_edges_from(edges_set)
     return graph_list, graph_embedding_list
+    # 创建好正常图
+    # graph_generator = generate_graphs_in_batches(event_list, cnt_record_map,uuid_to_node_attrs, id_entity_map)
+    # graph_embedding_list = []
+    # for batch_graphs, batch_embeddings in tqdm(graph_generator, total=len(event_list) // 1000,
+    #                                            desc='Collecting graphs'):
+    #     graph_list.extend(batch_graphs)
+    #     graph_embedding_list.extend(batch_embeddings)
+    # print("First 5 graphs in graph_list:")
+    # for graph in graph_list[:5]:
+    #     print(graph)
+
+    # print("\nFirst 5 embeddings in graph_embedding_list:")
+    # for embedding in graph_embedding_list[:5]:
+    #     print(embedding)
+    # return graph_list, graph_embedding_list
 
 
 
