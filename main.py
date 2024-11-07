@@ -9,29 +9,41 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 # from attr_graph import GCNEncoder
-import torch
 import pickle
 
-from torch_geometric.nn import global_mean_pool
-if __name__ == '__main__':
-#统一维度，数值型的其他维度直接用0填充
-#类型的使用独热编码
-#null使用-1
-#有唯一性的使用编号，编号之后再进行统一维度
-#word2vec
-    nodes_dict = {
-        0: {'uuid': '753366C8-7B00-E70F-1E95-2102227BD6E1'},
-        1:{'record': 'Subject'},
-        2:{'subject_type': 'SUBJECT_PROCESS'},
-        3:{'parent': 'null'},
-        4:{'local_principal': '29895546-B124-1BEC-E91C-C9107B81C616'},
-        5:{'cid': '412'},
-        6:{'start_time': '0'},
-        7:{'unit_id': '0'},
-        8:{'cmdline': 'null'}
-    }
+dataset='trace'
+cnt=0
 
-    for v in nodes_dict.values():
-        print(list(v.values()))
-        torch.tensor(list(v.values()),dtype=torch.float)
-    #node_features = torch.tensor([list(v.values()) for v in nodes_dict.values()], dtype=torch.float)
+import pandas as pd
+import random
+def get_attrs(dataset):
+    input_file = f'./dataset/{dataset}/test_sub.txt'
+    # 读取数据到DataFrame
+    df = pd.read_csv(input_file,
+                     sep='\t',
+                     names=['uuid', 'record', 'subject_type', 'parent',
+                            'local_principal', 'cid', 'start_time',
+                            'unit_id', 'cmdline'])
+
+    # 直接将DataFrame转换为字典，uuid作为key
+    uuid_to_node_attrs = df.set_index('uuid').to_dict('index')
+    print(uuid_to_node_attrs)
+    input_file2 = f'./dataset/{dataset}/test_file.txt'
+    # 读取数据到DataFrame
+    df = pd.read_csv(input_file2,
+                     sep='\t',
+                     names=['uuid', 'record', 'file_type', 'epoch',
+                            'permission', 'path'])
+    # 直接将DataFrame转换为字典，uuid作为key
+    uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+    print(uuid_to_node_attrs)
+    return  uuid_to_node_attrs
+if __name__ == '__main__':
+    uuid_to_node_attrs = {}
+    uuid_to_node_attrs=get_attrs(dataset)
+
+    print("\n随机抽样检查3条记录：")
+    sample_uuids = random.sample(list(uuid_to_node_attrs.keys()), 3)
+    for uuid in sample_uuids:
+        print(f"\nUUID: {uuid}")
+        print(uuid_to_node_attrs[uuid])
