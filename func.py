@@ -498,6 +498,7 @@ def get_maps(dataset):
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
 def graph_node_construction(dataset,uuid_to_node_attrs,uuid_to_edge_attrs,id_entity_map,cnt_record_map):
+    graph_list = []
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
             print('loading event_list for node_construction')
@@ -527,7 +528,7 @@ def graph_node_construction(dataset,uuid_to_node_attrs,uuid_to_edge_attrs,id_ent
                             sub_edges_dict[(str('uuid:')+src_uuid, attr_name + str(':') + str(attr_value))] = None
                         
                     for attr_name, attr_value in dst_attr.items():
-                        sub_nodes_dict[cnt_node] = attr_name + str(':') + attr_value # 形式需要确认下20241107
+                        sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value) # 形式需要确认下20241107
                         cnt_node +=1
                         if attr_name != 'uuid':
                             sub_edges_dict[(str('uuid:')+dst_uuid, attr_name + str(':') + str(attr_value))] = None
