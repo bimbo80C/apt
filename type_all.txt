@@ -1,0 +1,14 @@
+TimeMarker, 0 x
+StartMarker, 0 x
+Host, 0 x
+SrcSinkObject, 683132
+Principal, 20
+Subject, 398658
+Event, 3533638
+FileObject, 55736
+NetFlowObject, 25123
+MemoryObject, 107768
+UnnamedPipeObject, 1695
+UnitDependency, 194218 x
+# 目前需要保留的 SrcSinkObject Principal Subject Event FileObject NetFlowObject MemoryObject，UnnamedPipeObject 8个
+Event Subject FileObject NetFlowObject MemoryObject这5个肯定要 剩下3个待定
