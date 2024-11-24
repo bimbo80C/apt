@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pickle as pkl
-
+from sub_g_encoding import sub_g_encoding
 # from attr_graph import GCNEncoder
 # import torch
 # from torch_geometric.nn import global_mean_pool
@@ -555,11 +555,13 @@ def get_maps(dataset):
     return id_entity_map, cnt_record_map
 
 def single_sub_g_construction(src_uuid,dst_uuid,event_uuid,uuid_to_node_attrs, uuid_to_edge_attrs):
-    sub_g=nx.Graph()
+    sub_g=nx.DiGraph()
     key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
     detail_attr_dict = ['local_principal', 'cmdline', 'file_type', 'local_address', 'local_port', 'remote_port',
                         'ip_protocol']
+    # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
+    #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、local_principal、remote_port、ip_protocol
     cnt_node = 0
     src_node_cnt = 0
     dst_node_cnt = 0
@@ -570,34 +572,35 @@ def single_sub_g_construction(src_uuid,dst_uuid,event_uuid,uuid_to_node_attrs, u
     sub_g_edges_list = []
 
     # key node
-    for attr_name,_ in src_attr.items():
+    for attr_name,attr_value in src_attr.items():
         if attr_name in key_attr_dict:
-            sub_g_nodes_list.append((cnt_node,{"type":attr_name}))
+            sub_g_nodes_list.append((cnt_node,{"type":attr_value}))
             src_node_cnt=cnt_node
             cnt_node += 1
     for attr_name,_ in dst_attr.items():
         if attr_name in key_attr_dict:
-            sub_g_nodes_list.append((cnt_node,{"type":attr_name}))
+            sub_g_nodes_list.append((cnt_node,{"type":attr_value}))
             dst_node_cnt=cnt_node
             cnt_node += 1
     # key edge
-    for attr_name,_ in event_attr.items():
+    for attr_name,attr_value in event_attr.items():
         if attr_name in key_attr_dict:
-            sub_g_edges_list.append((src_node_cnt,dst_node_cnt,{"type":attr_name}))
+            sub_g_edges_list.append((src_node_cnt,dst_node_cnt,{"type":attr_value}))
     # detail node
-    for attr_name, _ in src_attr.items():
+    for attr_name, attr_value in src_attr.items():
         if attr_name in detail_attr_dict:
-            sub_g_nodes_list.append((cnt_node, {"type": attr_name}))
+            sub_g_nodes_list.append((cnt_node, {"type": attr_value}))
             sub_g_edges_list.append((src_node_cnt, cnt_node))
             cnt_node += 1
-    for attr_name, _ in dst_attr.items():
+    for attr_name, attr_value in dst_attr.items():
         if attr_name in detail_attr_dict:
-            sub_g_nodes_list.append((cnt_node, {"type": attr_name}))
+            sub_g_nodes_list.append((cnt_node, {"type": attr_value}))
             sub_g_edges_list.append((dst_node_cnt, cnt_node))
             cnt_node += 1
     sub_g.add_nodes_from(sub_g_nodes_list)
     sub_g.add_edges_from(sub_g_edges_list)
     return sub_g
+
 def sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
     sub_g_list = []
     cnt=0
@@ -697,7 +700,7 @@ def graph_edge_construction(dataset, edges_set, cnt_record_map):
 # 从event读出src和dst,匹配两者类型，去相应文件读取属性，将节点相连
 # 先尝试建立所有subject事件对
 def graph_construction(dataset):
-    G = nx.Graph()
+
     edges_set = set()
     # graph_list = []
     graph_embedding_list = []
@@ -728,3 +731,4 @@ if __name__ == '__main__':
     # find_entity_pair(dataset)
     # test(dataset)
     graph_construction(dataset)
+    sub_g_encoding(dataset)

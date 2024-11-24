@@ -18,6 +18,7 @@ def sub_g_encoding(dataset):
         node_attrs=['type'],
         edge_attrs=['type']
     ) for sub_g in pkl.load(open(path + '/sub_g_list.pkl', 'rb'))]
+    print('pkl file has loaded')
     node_feature_dim = 0
     for sub_g in sub_g_list:
         node_feature_dim = max(sub_g.ndata["type"].max().item(), node_feature_dim)

@@ -13,7 +13,7 @@ import pickle
 
 dataset='trace'
 cnt=0
-
+import dgl
 import pandas as pd
 import random
 def get_attrs(dataset):
@@ -38,28 +38,36 @@ def get_attrs(dataset):
     uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
     print(uuid_to_node_attrs)
     return  uuid_to_node_attrs
+
+def create_test_subgraph():
+    # 创建有向图
+    G = nx.DiGraph()
+    # 添加节点
+    G.add_node(0, type='subject')
+    # 文件节点
+    G.add_node(1, type='filetype')
+    # 网络流节点
+    G.add_node(2, type='192.168.1.100')
+    # 内存节点
+    G.add_node(3, type='0x7FFE0000')
+    # 事件节点
+    G.add_node(4, type='PROCESS_CREATE')
+
+    G.add_node(5,type='C:\\Windows\\System32\\svchost.exe -k netsvcs')
+    # 添加边
+    G.add_edge(0, 1, type='WRITE')  # 进程写文件
+    G.add_edge(0, 2,type='')
+
 if __name__ == '__main__':
-    # uuid_to_node_attrs = {}
-    # uuid_to_node_attrs=get_attrs(dataset)
-    #
-    # print("\n随机抽样检查3条记录：")
-    # sample_uuids = random.sample(list(uuid_to_node_attrs.keys()), 3)
-    # for uuid in sample_uuids:
-    #     print(f"\nUUID: {uuid}")
-    #     print(uuid_to_node_attrs[uuid])
+    sub_graphs = [create_test_subgraph()]
 
+    # 保存为pickle文件
+    with open('sub_g_list.pkl', 'wb') as f:
+        pickle.dump(sub_graphs, f)
 
-    G = nx.Graph()
-
-    # 方法1：使用列表
-    nodes_list = [1, 2, 3, 4, 5]
-    G.add_nodes_from(nodes_list)
-
-    # 带属性的节点列表
-    nodes_with_attr = [(1, {"color": "red"}),
-                       (2, {"color": "blue"}),
-                       (3, {"color": "green"})]
-    G.add_nodes_from(nodes_with_attr)
-    G.add_node(6,type='/file')
-    print(G.nodes.keys())
-    print(G.nodes.data())
+    # 转换为DGL格式
+    dgl_graphs = [dgl.from_networkx(
+        g,
+        node_attrs=['type'],
+        edge_attrs=['type']
+    ) for g in sub_graphs]
