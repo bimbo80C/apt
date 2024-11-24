@@ -39,11 +39,27 @@ def get_attrs(dataset):
     print(uuid_to_node_attrs)
     return  uuid_to_node_attrs
 if __name__ == '__main__':
-    uuid_to_node_attrs = {}
-    uuid_to_node_attrs=get_attrs(dataset)
+    # uuid_to_node_attrs = {}
+    # uuid_to_node_attrs=get_attrs(dataset)
+    #
+    # print("\n随机抽样检查3条记录：")
+    # sample_uuids = random.sample(list(uuid_to_node_attrs.keys()), 3)
+    # for uuid in sample_uuids:
+    #     print(f"\nUUID: {uuid}")
+    #     print(uuid_to_node_attrs[uuid])
 
-    print("\n随机抽样检查3条记录：")
-    sample_uuids = random.sample(list(uuid_to_node_attrs.keys()), 3)
-    for uuid in sample_uuids:
-        print(f"\nUUID: {uuid}")
-        print(uuid_to_node_attrs[uuid])
+
+    G = nx.Graph()
+
+    # 方法1：使用列表
+    nodes_list = [1, 2, 3, 4, 5]
+    G.add_nodes_from(nodes_list)
+
+    # 带属性的节点列表
+    nodes_with_attr = [(1, {"color": "red"}),
+                       (2, {"color": "blue"}),
+                       (3, {"color": "green"})]
+    G.add_nodes_from(nodes_with_attr)
+    G.add_node(6,type='/file')
+    print(G.nodes.keys())
+    print(G.nodes.data())

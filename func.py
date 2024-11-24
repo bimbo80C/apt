@@ -9,28 +9,29 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+
 # from attr_graph import GCNEncoder
 # import torch
 # from torch_geometric.nn import global_mean_pool
 
-# metadata = {
-#     'trace': {
-#         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-#                   'ta1-trace-e3-official-1.json.3'],
-#         'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-#                  'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']
-#     },
-#     'theia': {
-#         'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
-#                   'ta1-theia-e3-official-6r.json.3'],
-#         'test': ['ta1-theia-e3-official-6r.json.8']
-#     },
-#     'cadets': {
-#         'train': ['ta1-cadets-e3-official.json', 'ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2',
-#                   'ta1-cadets-e3-official-2.json.1'],
-#         'test': ['ta1-cadets-e3-official-2.json']
-#     }
-# }
+metadata = {
+    'trace': {
+        'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
+                  'ta1-trace-e3-official-1.json.3'],
+        'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
+                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']
+    },
+    'theia': {
+        'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
+                  'ta1-theia-e3-official-6r.json.3'],
+        'test': ['ta1-theia-e3-official-6r.json.8']
+    },
+    'cadets': {
+        'train': ['ta1-cadets-e3-official.json', 'ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2',
+                  'ta1-cadets-e3-official-2.json.1'],
+        'test': ['ta1-cadets-e3-official-2.json']
+    }
+}
 
 ###### for all
 pattern_uuid = re.compile(r'uuid\":\"(.*?)\"')
@@ -88,17 +89,20 @@ name_map = {
     "MemoryObject": "memory",
     "UnnamedPipeObject": "unnamed"
 }
+
+
 # TODO 将全部的节点属性进行一个if判断作为图嵌入向量部分的输入
 ###############
 # 提取每个属性到TXT，生成id_entity_map.json即uuid和类型的映射
 ###############
 def preprocess(dataset):
     id_entity_map = {}
-    for file in os.listdir('./dataset/{}/'.format(dataset)):  #file ta1-trace-e3-official-1.json except 5 & 6 for testing
-        if 'json' in file and 'entity' not in file  and '5' not in file and '6' not in file:
+    for file in os.listdir(
+            './dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
+        if file in metadata[dataset]['train']:
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
-            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8') 
+            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
             fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
             fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
             fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
@@ -113,7 +117,7 @@ def preprocess(dataset):
                 if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
                 uuid = pattern_uuid.findall(line)[0]
                 record = pattern_record.findall(line)[0]
-                id_entity_map[uuid] = record # all training dataset data
+                id_entity_map[uuid] = record  # all training dataset data
                 if record == 'SrcSinkObject':
                     epoch = pid = fileDescriptor = 'null'
                     if len(pattern_epoch.findall(line)) > 0:
@@ -256,18 +260,31 @@ def preprocess(dataset):
 # 找出所有的节点对
 def find_entity_pair(dataset):
     record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
+    entity_pairs = []
     entity_cnt = 0
+    src_dst_deduplication = set()
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
     for file in os.listdir('./dataset/{}/'.format(dataset)):
         if 'event' in file:   # attr_event.txt
-            fw_entity_pair = open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', 'w', encoding='utf-8')
+            # fw_entity_pair = open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', 'w', encoding='utf-8')
             print('searching behavior entity pair {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'r', encoding='utf-8')
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
+                src_dst_pair = (src, dst1)
+
+                if src_dst_pair in src_dst_deduplication:
+                    continue
+                src_dst_deduplication.add(src_dst_pair)
+
+                src_dst_pair = (src, dst2)
+                if src_dst_pair in src_dst_deduplication:
+                    continue
+                src_dst_deduplication.add(src_dst_pair)
+
                 if uuid not in record_cnt_map:
                     record_cnt_map[uuid] = entity_cnt
                     entity_cnt += 1
@@ -279,22 +296,22 @@ def find_entity_pair(dataset):
                         record_cnt_map[dst1] = entity_cnt
                         entity_cnt += 1
                     entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                        record_cnt_map[dst1]) + '\n'
-                    fw_entity_pair.write(entity_pair)
-                    # entity_pair 存放的是 event src dst 的 编号
-                    # record_cnt_map 存放的是 uuid - cnt
+                        record_cnt_map[dst1]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
                 if dst2 in id_entity_map:
                     if dst2 not in record_cnt_map:
                         record_cnt_map[dst2] = entity_cnt
                         entity_cnt += 1
                     entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                        record_cnt_map[dst2]) + '\n'
-                    fw_entity_pair.write(entity_pair)
+                        record_cnt_map[dst2]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
 
-                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:注意一下这个顺序
+            entity_pairs.sort(key=lambda l: l[4])
+            with open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', "w") as fw_entity_pair:
+                for pair in entity_pairs:
+                    fw_entity_pair.write(f"{pair}")
             fw_entity_pair.close()
-
-            # finish the entity_pair.txt 
+            # finish the entity_pair.txt
     if len(record_cnt_map) != 0:
         fw_record_cnt_map = open('./dataset/{}/'.format(dataset) + 'record_cnt_map.json', 'w', encoding='utf-8')
         json.dump(record_cnt_map, fw_record_cnt_map)
@@ -306,10 +323,13 @@ def find_entity_pair(dataset):
         json.dump(cnt_record_map, fw_cnt_record_map)
         fw_cnt_record_map.close()
         # finish the count_record.txt
+    return
+
+
 # event_list={{},..,{}}
 
 
-#测试
+# 测试
 def test(dataset, record_cnt_map=None, entity_pair=None):
     entity_pair_counts = {}
     record_cnt_map = {}
@@ -431,8 +451,8 @@ def test(dataset, record_cnt_map=None, entity_pair=None):
 
 def get_attrs(dataset):
     # entity == subject
-    uuid_to_node_attrs={}
-    uuid_to_edge_attrs={}
+    uuid_to_node_attrs = {}
+    uuid_to_edge_attrs = {}
     if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_sub:
             df = pd.read_csv(f_sub,
@@ -447,7 +467,7 @@ def get_attrs(dataset):
             df = pd.read_csv(f_file,
                              sep='\t',
                              names=['uuid', 'record', 'file_type', 'epoch',
-                                    'permission','path'])
+                                    'permission', 'path'])
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
@@ -472,6 +492,13 @@ def get_attrs(dataset):
                                     'size'])
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
+    if os.path.exists('./dataset/{}/attr_unnamed.txt'.format(dataset)):
+        with open('./dataset/{}/attr_unnamed.txt'.format(dataset), 'r', encoding='utf-8') as f_unnamed:
+            df = pd.read_csv(f_unnamed,
+                             sep='\t',
+                             names=['uuid', 'record', 'epoch', 'pid', 'source_file_descriptor', 'sink_file_descriptor']
+                             )
+            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
@@ -485,7 +512,8 @@ def get_attrs(dataset):
                              usecols=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'size', 'time']
                              )
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
-    return uuid_to_node_attrs,uuid_to_edge_attrs
+    return uuid_to_node_attrs, uuid_to_edge_attrs
+
 
 def get_maps(dataset):
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
@@ -497,46 +525,122 @@ def get_maps(dataset):
             print('loading cnt_record_map')
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
-def graph_node_construction(dataset,uuid_to_node_attrs,uuid_to_edge_attrs,id_entity_map,cnt_record_map):
-    graph_list = []
+
+def single_sub_g_construction(src_uuid,dst_uuid,event_uuid,uuid_to_node_attrs, uuid_to_edge_attrs):
+    sub_g=nx.Graph()
+    key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
+                     'event_type']  # 对应subject,file,netflow,memory,event核心信息
+    detail_attr_dict = ['local_principal', 'cmdline', 'file_type', 'local_address', 'local_port', 'remote_port',
+                        'ip_protocol']
+    cnt_node = 0
+    src_node_cnt = 0
+    dst_node_cnt = 0
+    event_attr = uuid_to_edge_attrs[event_uuid]
+    src_attr = uuid_to_node_attrs[src_uuid]
+    dst_attr = uuid_to_node_attrs[dst_uuid]
+    sub_g_nodes_list=[]
+    sub_g_edges_list = []
+
+    # key node
+    for attr_name,_ in src_attr.items():
+        if attr_name in key_attr_dict:
+            sub_g_nodes_list.append((cnt_node,{"type":attr_name}))
+            src_node_cnt=cnt_node
+            cnt_node += 1
+    for attr_name,_ in dst_attr.items():
+        if attr_name in key_attr_dict:
+            sub_g_nodes_list.append((cnt_node,{"type":attr_name}))
+            dst_node_cnt=cnt_node
+            cnt_node += 1
+    # key edge
+    for attr_name,_ in event_attr.items():
+        if attr_name in key_attr_dict:
+            sub_g_edges_list.append((src_node_cnt,dst_node_cnt,{"type":attr_name}))
+    # detail node
+    for attr_name, _ in src_attr.items():
+        if attr_name in detail_attr_dict:
+            sub_g_nodes_list.append((cnt_node, {"type": attr_name}))
+            sub_g_edges_list.append((src_node_cnt, cnt_node))
+            cnt_node += 1
+    for attr_name, _ in dst_attr.items():
+        if attr_name in detail_attr_dict:
+            sub_g_nodes_list.append((cnt_node, {"type": attr_name}))
+            sub_g_edges_list.append((dst_node_cnt, cnt_node))
+            cnt_node += 1
+    sub_g.add_nodes_from(sub_g_nodes_list)
+    sub_g.add_edges_from(sub_g_edges_list)
+    return sub_g
+def sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
+    sub_g_list = []
+    cnt=0
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
-            print('loading event_list for node_construction')
-            for line in f:
+            print('loading event_list for sub_g_construction')
+            for line in tqdm(f):
                 event = line.strip().split('\t')
-                entity_pair ={
+                entity_pair = {
                     'event': cnt_record_map[event[0]],
                     'src': cnt_record_map[event[1]],
                     'dst': cnt_record_map[event[2]],
                 }
-                attr_dict = ['Event','Subject','FileObject','NetFlowObject','MemoryObject']
+                attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+
                 if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
                     event_uuid = entity_pair['event']
                     src_uuid = entity_pair['src']
                     dst_uuid = entity_pair['dst']
-                    event_attr = uuid_to_edge_attrs[event_uuid]
-                    src_attr = uuid_to_node_attrs[src_uuid]
-                    dst_attr = uuid_to_node_attrs[dst_uuid]
-                    sub_G = nx.DiGraph()
-                    sub_nodes_dict = {}
-                    sub_edges_dict = {}
-                    cnt_node = 0
-                    for attr_name,attr_value in src_attr.items():
-                        sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value)
-                        cnt_node +=1
-                        if attr_name != 'uuid':
-                            sub_edges_dict[(str('uuid:')+src_uuid, attr_name + str(':') + str(attr_value))] = None
-                        
-                    for attr_name, attr_value in dst_attr.items():
-                        sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value) # 形式需要确认下20241107
-                        cnt_node +=1
-                        if attr_name != 'uuid':
-                            sub_edges_dict[(str('uuid:')+dst_uuid, attr_name + str(':') + str(attr_value))] = None
-                    sub_edges_dict[(str('uuid:')+src_uuid,str('uuid:')+dst_uuid)] = event_attr # add edge (src,dst)
-                    sub_G.add_nodes_from(sub_nodes_dict.values())
-                    sub_G.add_edges_from(sub_edges_dict.keys())
-                    graph_list.append(sub_G)
-    return graph_list
+                    cnt+=1
+                    # sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs)
+                    # sub_g_list.append(sub_g)
+                    # if cnt % 100000 ==0 :
+                    #     print("{} sub_g is finished".format(cnt))
+    # return sub_g_list
+    print(cnt)
+
+
+# def graph_node_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
+#     graph_list = []
+#     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
+#         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
+#             print('loading event_list for node_construction')
+#             for line in tqdm(f):
+#                 event = line.strip().split('\t')
+#                 entity_pair = {
+#                     'event': cnt_record_map[event[0]],
+#                     'src': cnt_record_map[event[1]],
+#                     'dst': cnt_record_map[event[2]],
+#                 }
+#                 attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+#
+#                 if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
+#                     event_uuid = entity_pair['event']
+#                     src_uuid = entity_pair['src']
+#                     dst_uuid = entity_pair['dst']
+#                     event_attr = uuid_to_edge_attrs[event_uuid]
+#                     src_attr = uuid_to_node_attrs[src_uuid]
+#                     dst_attr = uuid_to_node_attrs[dst_uuid]
+#                     sub_G = nx.DiGraph()
+#                     sub_nodes_dict = {}
+#                     sub_edges_dict = {}
+#                     cnt_node = 0
+#                     for attr_name, attr_value in src_attr.items():
+#                         sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value)
+#                         cnt_node += 1
+#                         if attr_name != 'uuid':
+#                             sub_edges_dict[(str('uuid:') + src_uuid, attr_name + str(':') + str(attr_value))] = None
+#
+#                     for attr_name, attr_value in dst_attr.items():
+#                         sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value)  # 形式需要确认下20241107
+#                         cnt_node += 1
+#                         if attr_name != 'uuid':
+#                             sub_edges_dict[(str('uuid:') + dst_uuid, attr_name + str(':') + str(attr_value))] = None
+#                     sub_edges_dict[
+#                         (str('uuid:') + src_uuid, str('uuid:') + dst_uuid)] = event_attr  # add edge (src,dst)
+#                     sub_G.add_nodes_from(sub_nodes_dict.values())
+#                     sub_G.add_edges_from(sub_edges_dict.keys())
+#                     graph_list.append(sub_G)
+#     return graph_list
+
 
 # 待更新
 def graph_node_embedding(graph_list):
@@ -545,19 +649,22 @@ def graph_node_embedding(graph_list):
             print(node)
     return
 
+
 # 将节点对整体之外的边添加到图中
-def graph_edge_construction(dataset,edges_set,cnt_record_map):
+def graph_edge_construction(dataset, edges_set, cnt_record_map):
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
             print('loading event_list for edge_construction')
             lines = f.readlines()
             for i in range(len(lines)):
-                line_i = lines[i].strip().split('\t') 
+                line_i = lines[i].strip().split('\t')
                 for j in range(i + 1, len(lines)):
                     line_j = lines[j].strip().split('\t')
                     if line_i[2] == line_j[1]:
                         edges_set.add((cnt_record_map[line_i[0]], cnt_record_map[line_j[0]]))
     return
+
+
 # 对每个节点对进行处理，构建子图
 # 从event读出src和dst,匹配两者类型，去相应文件读取属性，将节点相连
 # 先尝试建立所有subject事件对
@@ -570,13 +677,15 @@ def graph_construction(dataset):
     # uuid_to_edge_attrs = {}
     # id_entity_map = {}
     # cnt_record_map = {}
-    uuid_to_node_attrs,uuid_to_edge_attrs = get_attrs(dataset)
-    id_entity_map,cnt_record_map = get_maps(dataset)
-    graph_list = graph_node_construction(dataset,uuid_to_node_attrs,uuid_to_edge_attrs,id_entity_map,cnt_record_map)
-    graph_node_embedding(graph_list)
-    graph_edge_construction(dataset,edges_set,cnt_record_map)
-    G.add_edges_from(edges_set)
+    uuid_to_node_attrs, uuid_to_edge_attrs = get_attrs(dataset)
+    id_entity_map, cnt_record_map = get_maps(dataset)
+    graph_list = sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
+    print("sub_G is ready")
+    # graph_node_embedding(graph_list)
+    # graph_edge_construction(dataset,edges_set,cnt_record_map)
+    # G.add_edges_from(edges_set)
     return graph_list, graph_embedding_list
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
@@ -587,7 +696,6 @@ if __name__ == '__main__':
         raise NotImplementedError("This dataset is not included")
 
     # preprocess(dataset)
-    # find_entity_pair(dataset)
+    find_entity_pair(dataset)
     # test(dataset)
     graph_construction(dataset)
-
