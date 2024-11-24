@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+import pickle as pkl
 
 # from attr_graph import GCNEncoder
 # import torch
@@ -274,16 +275,21 @@ def find_entity_pair(dataset):
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
-                src_dst_pair = (src, dst1)
 
-                if src_dst_pair in src_dst_deduplication:
-                    continue
-                src_dst_deduplication.add(src_dst_pair)
-
-                src_dst_pair = (src, dst2)
-                if src_dst_pair in src_dst_deduplication:
-                    continue
-                src_dst_deduplication.add(src_dst_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst1, src)
+                # else:
+                #     src_dst_pair = (src, dst1)
+                # if src_dst_pair in src_dst_deduplication:
+                #     continue
+                # src_dst_deduplication.add(src_dst_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst2, src)
+                # else:
+                #     src_dst_pair = (src, dst2)
+                # if src_dst_pair in src_dst_deduplication:
+                #     continue
+                # src_dst_deduplication.add(src_dst_pair)
 
                 if uuid not in record_cnt_map:
                     record_cnt_map[uuid] = entity_cnt
@@ -295,16 +301,38 @@ def find_entity_pair(dataset):
                     if dst1 not in record_cnt_map:
                         record_cnt_map[dst1] = entity_cnt
                         entity_cnt += 1
-                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                        record_cnt_map[dst1]) + '\t' + str(time)
-                    entity_pairs.append(entity_pair)
+                    if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                        src_dst_pair = (dst1, src)
+                        if src_dst_pair not in src_dst_deduplication:
+                            src_dst_deduplication.add(src_dst_pair)
+                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
+                            entity_pairs.append(entity_pair)
+                    else:
+                        src_dst_pair = (src, dst1)
+                        if src_dst_pair not in src_dst_deduplication:
+                            src_dst_deduplication.add(src_dst_pair)
+                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                                record_cnt_map[dst1]) + '\t' + str(time)
+                            entity_pairs.append(entity_pair)
                 if dst2 in id_entity_map:
                     if dst2 not in record_cnt_map:
                         record_cnt_map[dst2] = entity_cnt
                         entity_cnt += 1
-                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                        record_cnt_map[dst2]) + '\t' + str(time)
-                    entity_pairs.append(entity_pair)
+                    if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                        src_dst_pair = (dst2, src)
+                        if src_dst_pair not in src_dst_deduplication:
+                            src_dst_deduplication.add(src_dst_pair)
+                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
+                            entity_pairs.append(entity_pair)
+                    else:
+                        src_dst_pair = (src, dst2)
+                        if src_dst_pair not in src_dst_deduplication:
+                            src_dst_deduplication.add(src_dst_pair)
+                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                                record_cnt_map[dst2]) + '\t' + str(time)
+                            entity_pairs.append(entity_pair)
 
             entity_pairs.sort(key=lambda l: l[4])
             with open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', "w") as fw_entity_pair:
@@ -590,12 +618,12 @@ def sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entit
                     src_uuid = entity_pair['src']
                     dst_uuid = entity_pair['dst']
                     cnt+=1
-                    # sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs)
-                    # sub_g_list.append(sub_g)
-                    # if cnt % 100000 ==0 :
-                    #     print("{} sub_g is finished".format(cnt))
-    # return sub_g_list
-    print(cnt)
+                    sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs)
+                    sub_g_list.append(sub_g)
+                    if cnt % 100000 ==0 :
+                        print("{} sub_g is finished".format(cnt))
+    return sub_g_list
+    # print(cnt)
 
 
 # def graph_node_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
@@ -679,12 +707,13 @@ def graph_construction(dataset):
     # cnt_record_map = {}
     uuid_to_node_attrs, uuid_to_edge_attrs = get_attrs(dataset)
     id_entity_map, cnt_record_map = get_maps(dataset)
-    graph_list = sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
+    sub_g_list = sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
     print("sub_G is ready")
     # graph_node_embedding(graph_list)
     # graph_edge_construction(dataset,edges_set,cnt_record_map)
     # G.add_edges_from(edges_set)
-    return graph_list, graph_embedding_list
+    pkl.dump([nx.node_link_data(sub_g) for sub_g in sub_g_list], open('../dataset/{}/sub_g_list.pkl'.format(dataset), 'wb'))
+
 
 
 if __name__ == '__main__':
@@ -696,6 +725,6 @@ if __name__ == '__main__':
         raise NotImplementedError("This dataset is not included")
 
     # preprocess(dataset)
-    find_entity_pair(dataset)
+    # find_entity_pair(dataset)
     # test(dataset)
     graph_construction(dataset)
