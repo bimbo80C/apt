@@ -675,8 +675,7 @@ def graph_node_embedding(graph_list):
     for graph in graph_list:
         for node in graph.nodes():
             print(node)
-    return 
-###
+    return
 
 
 # 将节点对整体之外的边添加到图中
@@ -728,8 +727,4 @@ if __name__ == '__main__':
     # preprocess(dataset)
     # find_entity_pair(dataset)
     # test(dataset)
-<<<<<<< HEAD
     graph_construction(dataset)
-=======
-    graph_construction(dataset)
->>>>>>> 411c7bc216177af115f69d091a1ab00a1d6b1218
