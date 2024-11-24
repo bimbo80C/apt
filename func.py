@@ -712,7 +712,7 @@ def graph_construction(dataset):
     # graph_node_embedding(graph_list)
     # graph_edge_construction(dataset,edges_set,cnt_record_map)
     # G.add_edges_from(edges_set)
-    pkl.dump([nx.node_link_data(sub_g) for sub_g in sub_g_list], open('../dataset/{}/sub_g_list.pkl'.format(dataset), 'wb'))
+    pkl.dump([nx.node_link_data(sub_g) for sub_g in sub_g_list], open('./dataset/{}/sub_g_list.pkl'.format(dataset), 'wb'))
 
 
 
