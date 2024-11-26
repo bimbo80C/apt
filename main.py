@@ -58,16 +58,31 @@ def create_test_subgraph():
     G.add_edge(0, 1, type='WRITE')  # 进程写文件
     G.add_edge(0, 2,type='')
 
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+import torch
 if __name__ == '__main__':
-    sub_graphs = [create_test_subgraph()]
 
-    # 保存为pickle文件
-    with open('sub_g_list.pkl', 'wb') as f:
-        pickle.dump(sub_graphs, f)
 
-    # 转换为DGL格式
-    dgl_graphs = [dgl.from_networkx(
-        g,
-        node_attrs=['type'],
-        edge_attrs=['type']
-    ) for g in sub_graphs]
+    # 示例文本数据
+    documents = [
+        "I love programming in Python",
+        "Python is a great programming language",
+        "I love solving problems with Python",
+        "I enjoy learning new programming languages"
+    ]
+
+    # 创建 TfidfVectorizer 对象
+    vectorizer = TfidfVectorizer()
+
+    # 使用 TfidfVectorizer 转换文本数据
+    tfidf_matrix = vectorizer.fit_transform(documents)
+    features = torch.Tensor(tfidf_matrix.toarray())
+    print(features)
+    # 输出词汇表（即所有词的列表）
+    print("Vocabulary: ", vectorizer.get_feature_names_out())
+
+    # 输出 TF-IDF 特征矩阵
+    print("\nTF-IDF Matrix:")
+
+    print(tfidf_matrix.toarray())

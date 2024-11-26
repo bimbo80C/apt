@@ -3,17 +3,14 @@ import argparse
 from tqdm import tqdm
 import re
 import json
-import collections
-from collections import Counter
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pickle as pkl
 from sub_g_encoding import sub_g_encoding
-# from attr_graph import GCNEncoder
-# import torch
-# from torch_geometric.nn import global_mean_pool
+from sklearn.feature_extraction.text import TfidfVectorizer
+import torch
+import dgl
 
 metadata = {
     'trace': {
@@ -257,7 +254,6 @@ def preprocess(dataset):
         json.dump(id_entity_map, fw_id_entity_map)
         fw_id_entity_map.close()
 
-
 # 找出所有的节点对
 def find_entity_pair(dataset):
     record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
@@ -353,129 +349,22 @@ def find_entity_pair(dataset):
         # finish the count_record.txt
     return
 
-
-# event_list={{},..,{}}
-
-
-# 测试
-def test(dataset, record_cnt_map=None, entity_pair=None):
-    entity_pair_counts = {}
-    record_cnt_map = {}
-    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
-        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
-            print('loading id_entity_map')
-            id_entity_map = json.load(f_id_entity_map)
-    if os.path.exists('./dataset/{}/record_cnt_map.json'.format(dataset)):
-        with open('./dataset/{}/record_cnt_map.json'.format(dataset), 'r', encoding='utf-8') as f_record_cnt_map:
-            record_cnt_map = json.load(f_record_cnt_map)
-    record_cnt_map_tmp = {str(v): k for k, v in record_cnt_map.items()}
-    if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
-        with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
-            for line in f.readlines():
-                event = line.strip().split('\t')
-                entity_pair = {
-                    'event_record': record_cnt_map_tmp[event[0]],
-                    'src_record': record_cnt_map_tmp[event[1]],
-                    'dst_record': record_cnt_map_tmp[event[2]]
-                }
-                record_type = id_entity_map[entity_pair['event_record']] + ' ' + id_entity_map[
-                    entity_pair['src_record']] + ' ' + id_entity_map[entity_pair['dst_record']]
-                if record_type not in entity_pair_counts:
-                    entity_pair_counts[record_type] = 1
-                else:
-                    entity_pair_counts[record_type] += 1
-
-    for entity_pair, count in entity_pair_counts.items():
-        print(f"entity_pair: {entity_pair}, count: {count}")
-
-
-# 构建节点属性图,并且将子图以uuid的形式加入整图G当中
-# def get_attrs(dataset,uuid_to_node_attrs,uuid_to_edge_attrs):
-#     # entity == subject
-#     f_node = open('./dataset/{}/'.format(dataset) + 'uuid_to_node_attrs.txt', 'a', encoding='utf-8')
-#     f_edge = open('./dataset/{}/'.format(dataset) + 'uuid_to_edge_attrs.txt', 'a', encoding='utf-8')
-#     if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_attr_sub:
-#             for attr in tqdm(f_attr_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 node_attrs = {
-#                     'uuid': attr_values[0],
-#                     'record': attr_values[1],
-#                     'subject_type': attr_values[2],
-#                     'parent': attr_values[3],
-#                     'local_principal': attr_values[4],
-#                     'cid': attr_values[5],
-#                     'start_time': attr_values[6],
-#                     'unit_id': attr_values[7],
-#                     'cmdline': attr_values[8]
-#                 }
-#                 uuid = node_attrs['uuid']
-#                 # uuid_to_node_attrs[uuid] = node_attrs
-#                 json.dump(node_attrs, f_node)
-#
-#     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as fw_file_sub:
-#             for attr in tqdm(fw_file_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 # uuid	record	file_type	epoch	permission	path
-#                 node_attrs = {
-#                     'uuid': attr_values[0],
-#                     'record': attr_values[1],
-#                     'file_type': attr_values[2],
-#                     'epoch': attr_values[3],
-#                     'permission': attr_values[4],
-#                     'path': attr_values[5]
-#                 }
-#                 uuid = node_attrs['uuid']
-#                 uuid_to_node_attrs[uuid] = node_attrs
-#     if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as fw_network_sub:
-#             for attr in tqdm(fw_network_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 # uuid	record	epoch	local_address	local_port	remote_address	remote_port	ip_protocol
-#                 node_attrs = {
-#                     'uuid': attr_values[0],
-#                     'record': attr_values[1],
-#                     'epoch': attr_values[2],
-#                     'local_address': attr_values[3],
-#                     'local_port': attr_values[4],
-#                     'remote_address': attr_values[5],
-#                     'remote_port': attr_values[6],
-#                     'ip_protocol': attr_values[7]
-#                 }
-#                 uuid = node_attrs['uuid']
-#                 uuid_to_node_attrs[uuid] = node_attrs
-#     if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem_sub:
-#             for attr in tqdm(f_mem_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 # uuid	record	epoch	memory_address	tgid	size
-#                 node_attrs = {
-#                     'uuid': attr_values[0],
-#                     'record': attr_values[1],
-#                     'epoch': attr_values[2],
-#                     'memory_address': attr_values[3],
-#                     'tgid': attr_values[4],
-#                     'size': attr_values[5]
-#                 }
-#                 uuid = node_attrs['uuid']
-#                 uuid_to_node_attrs[uuid] = node_attrs
-#     if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
-#         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event_sub:
-#             for attr in tqdm(f_event_sub.readlines()):
-#                 attr_values = attr.strip().split('\t')
-#                 # uuid	record	event_type	seq	thread_id	src	dst1	dst2	size	time
-#                 edge_attrs = {
-#                     'record': attr_values[1],
-#                     'event_type': attr_values[2],
-#                     'seq': attr_values[3],
-#                     'thread_id': attr_values[4],
-#                     'size': attr_values[8],
-#                     'time': attr_values[9],
-#                 }
-#                 uuid = attr_values[0]
-#                 uuid_to_edge_attrs[uuid] = edge_attrs
-#     return
+def get_embedding(df,attr_type):
+    if attr_type == 'cmdline':
+        # 将cmdline和path转换为特征向量
+        vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+        cmdline_features = vectorizer.fit_transform(df['cmdline'].fillna(''))  # 处理空值
+        cmdline_features = cmdline_features.toarray()
+        df['cmdline'] = list(cmdline_features)
+        return df
+    elif attr_type == 'path':
+        vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+        path_features = vectorizer.fit_transform(df['path'].fillna(''))  # 处理空值
+        path_features = path_features.toarray()
+        df['path'] = list(path_features)
+        return df
+    else:
+        raise NotImplementedError("This type is not included")
 
 def get_attrs(dataset):
     # entity == subject
@@ -488,6 +377,8 @@ def get_attrs(dataset):
                              names=['uuid', 'record', 'subject_type', 'parent',
                                     'local_principal', 'cid', 'start_time',
                                     'unit_id', 'cmdline'])
+            df = get_embedding(df, 'cmdline')
+            print(df['cmdline'])
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
@@ -496,8 +387,9 @@ def get_attrs(dataset):
                              sep='\t',
                              names=['uuid', 'record', 'file_type', 'epoch',
                                     'permission', 'path'])
+            df = get_embedding(df, 'path')
+            print(df['path'])
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-
     if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
         with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as f_netflow:
             df = pd.read_csv(f_netflow,
@@ -534,14 +426,11 @@ def get_attrs(dataset):
                              sep='\t',
                              names=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'src', 'dst1', 'dst2', 'size',
                                     'time'],
-                             dtype={
-                                 'size': 'float'
-                             },
+                             dtype={'size': 'float'},
                              usecols=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'size', 'time']
                              )
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
     return uuid_to_node_attrs, uuid_to_edge_attrs
-
 
 def get_maps(dataset):
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
@@ -628,52 +517,6 @@ def sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entit
     return sub_g_list
     # print(cnt)
 
-
-# def graph_node_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
-#     graph_list = []
-#     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
-#         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
-#             print('loading event_list for node_construction')
-#             for line in tqdm(f):
-#                 event = line.strip().split('\t')
-#                 entity_pair = {
-#                     'event': cnt_record_map[event[0]],
-#                     'src': cnt_record_map[event[1]],
-#                     'dst': cnt_record_map[event[2]],
-#                 }
-#                 attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
-#
-#                 if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
-#                     event_uuid = entity_pair['event']
-#                     src_uuid = entity_pair['src']
-#                     dst_uuid = entity_pair['dst']
-#                     event_attr = uuid_to_edge_attrs[event_uuid]
-#                     src_attr = uuid_to_node_attrs[src_uuid]
-#                     dst_attr = uuid_to_node_attrs[dst_uuid]
-#                     sub_G = nx.DiGraph()
-#                     sub_nodes_dict = {}
-#                     sub_edges_dict = {}
-#                     cnt_node = 0
-#                     for attr_name, attr_value in src_attr.items():
-#                         sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value)
-#                         cnt_node += 1
-#                         if attr_name != 'uuid':
-#                             sub_edges_dict[(str('uuid:') + src_uuid, attr_name + str(':') + str(attr_value))] = None
-#
-#                     for attr_name, attr_value in dst_attr.items():
-#                         sub_nodes_dict[cnt_node] = attr_name + str(':') + str(attr_value)  # 形式需要确认下20241107
-#                         cnt_node += 1
-#                         if attr_name != 'uuid':
-#                             sub_edges_dict[(str('uuid:') + dst_uuid, attr_name + str(':') + str(attr_value))] = None
-#                     sub_edges_dict[
-#                         (str('uuid:') + src_uuid, str('uuid:') + dst_uuid)] = event_attr  # add edge (src,dst)
-#                     sub_G.add_nodes_from(sub_nodes_dict.values())
-#                     sub_G.add_edges_from(sub_edges_dict.keys())
-#                     graph_list.append(sub_G)
-#     return graph_list
-
-
-# 待更新
 def graph_node_embedding(graph_list):
     for graph in graph_list:
         for node in graph.nodes():
@@ -709,13 +552,17 @@ def graph_construction(dataset):
     # id_entity_map = {}
     # cnt_record_map = {}
     uuid_to_node_attrs, uuid_to_edge_attrs = get_attrs(dataset)
-    id_entity_map, cnt_record_map = get_maps(dataset)
-    sub_g_list = sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
-    print("sub_G is ready")
+
+    # id_entity_map, cnt_record_map = get_maps(dataset)
+    # sub_g_list = sub_g_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
+    # print("sub_G is ready")
+
+
     # graph_node_embedding(graph_list)
     # graph_edge_construction(dataset,edges_set,cnt_record_map)
     # G.add_edges_from(edges_set)
-    pkl.dump([nx.node_link_data(sub_g) for sub_g in sub_g_list], open('./dataset/{}/sub_g_list.pkl'.format(dataset), 'wb'))
+
+    # pkl.dump([nx.node_link_data(sub_g) for sub_g in sub_g_list], open('./dataset/{}/sub_g_list.pkl'.format(dataset), 'wb'))
 
 
 
@@ -731,4 +578,4 @@ if __name__ == '__main__':
     # find_entity_pair(dataset)
     # test(dataset)
     graph_construction(dataset)
-    sub_g_encoding(dataset)
+    # sub_g_encoding(dataset)
