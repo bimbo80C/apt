@@ -670,45 +670,9 @@ if __name__ == '__main__':
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
 
-    # preprocess(dataset)
-    # find_entity_pair(dataset)
+    preprocess(dataset)
+    find_entity_pair(dataset)
     # test(dataset)
     # get_attrs(dataset)
     # graph_node_construction(dataset)
-    graph_edge_construction(dataset)
-    #### test for dim and len
-    # max_dim = 0
-    # with open('./dataset/{}/g_nodes_list.pkl'.format(dataset), 'rb') as f:
-    #     g_nodes_list = pkl.load(f)
-    # for _, node_data in g_nodes_list:
-    #     attr_tensor = node_data["attr"]
-    #     if isinstance(attr_tensor, torch.Tensor):
-    #         dim = attr_tensor.shape[0]  # 获取 tensor 的第一个维度（通常是特征的维度）
-    #     else:
-    #         dim = len(attr_tensor)  # 如果不是 tensor，假设它是一个 list 或 ndarray
-    #     # 更新最大维度
-    #     max_dim = max(max_dim, dim)
-    # #sub_g_encoding(dataset)
-    # list_length = len(g_nodes_list)
-    # print(f"g_nodes_list 的长度: {list_length}")
-    # print(f"最大 'attr' 维度: {max_dim}")
-    ###
-    # 假设 g_nodes_list 是你的数据
-    # g_nodes_list = [(event_uuid, {"attr": ...}), ...]
-
-    # 用于统计类型的计数器
-    # type_counter = Counter()
-    # with open('./dataset/{}/g_nodes_list.pkl'.format(dataset), 'rb') as f:
-    #     g_nodes_list = pkl.load(f)
-    # for _, node_data in g_nodes_list:
-    #     # 获取节点的 attr 特征
-    #     attr = node_data["attr"]
-    #
-    #     # 获取 attr 的类型，并记录到计数器
-    #     attr_type = type(attr)
-    #     type_counter[attr_type] += 1
-    #
-    # # 打印结果
-    # print("attr 类型统计:")
-    # for attr_type, count in type_counter.items():
-    #     print(f"{attr_type}: {count}")
+    # graph_edge_construction(dataset)
