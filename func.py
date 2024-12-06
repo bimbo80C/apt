@@ -15,6 +15,8 @@ import ipaddress
 from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 import matplotlib.pyplot as plt
+import random
+from loaddata import load_darpa_dataset
 metadata = {
     'trace': {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
@@ -96,11 +98,11 @@ name_map = {
 ###############
 # 提取每个属性到TXT，生成id_entity_map.json即uuid和类型的映射
 ###############
-def preprocess(dataset):
+def preprocess(dataset, mode):
     id_entity_map = {}
     for file in os.listdir(
             './dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
-        if file in metadata[dataset]['train']:
+        if file in metadata[dataset][mode]:
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
             fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
@@ -259,11 +261,16 @@ def preprocess(dataset):
 
 
 # 找出所有的节点对
-def find_entity_pair(dataset):
+def find_entity_pair(dataset, mode):
     record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
     entity_pairs = []
     entity_cnt = 0
     src_dst_deduplication = set()
+    malicious_entities = './groundtruth/{}.txt'.format(dataset)
+    f = open(malicious_entities, 'r')
+    malicious_entities = set()
+    for l in f.readlines():
+        malicious_entities.add(l.lstrip().rstrip())
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
@@ -275,6 +282,18 @@ def find_entity_pair(dataset):
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
+                if mode == 'train':
+                    if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                        continue
+                    if dst1 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                        continue
+                    if dst2 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                        continue
+                attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+                # 考虑加入unnamed
+                if src in id_entity_map and dst1 in id_entity_map:
+                    if id_entity_map[src] not in attr_dict or id_entity_map[dst1] not in attr_dict:
+                        continue
                 if uuid not in record_cnt_map:
                     record_cnt_map[uuid] = entity_cnt
                     entity_cnt += 1
@@ -289,8 +308,8 @@ def find_entity_pair(dataset):
                         src_dst_pair = (dst1, src)
                         if src_dst_pair not in src_dst_deduplication:
                             src_dst_deduplication.add(src_dst_pair)
-                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
-                                record_cnt_map[src]) + '\t' + str(time)
+                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                                record_cnt_map[dst1]) + '\t' + str(time)
                             entity_pairs.append(entity_pair)
                     else:
                         src_dst_pair = (src, dst1)
@@ -300,6 +319,8 @@ def find_entity_pair(dataset):
                                 record_cnt_map[dst1]) + '\t' + str(time)
                             entity_pairs.append(entity_pair)
                 if dst2 in id_entity_map:
+                    if id_entity_map[dst2] not in attr_dict:
+                        continue
                     if dst2 not in record_cnt_map:
                         record_cnt_map[dst2] = entity_cnt
                         entity_cnt += 1
@@ -317,7 +338,6 @@ def find_entity_pair(dataset):
                             entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
                                 record_cnt_map[dst2]) + '\t' + str(time)
                             entity_pairs.append(entity_pair)
-
             entity_pairs.sort(key=lambda l: l[4])
             with open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', "w") as fw_entity_pair:
                 for pair in entity_pairs:
@@ -557,7 +577,7 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
         if isinstance(attr_value, (list, np.ndarray)):
             if len(attr_value) < max_dim:
                 processed_types[attr_name] = np.array(attr_value, dtype=np.float32).tolist() + [0.0] * (
-                            max_dim - len(attr_value))
+                        max_dim - len(attr_value))
             else:
                 processed_types[attr_name] = attr_value
         else:
@@ -589,26 +609,31 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                     'src': cnt_record_map[event[1]],
                     'dst': cnt_record_map[event[2]],
                 }
-                attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
-
-                if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
-                    event_uuid = entity_pair['event']
-                    src_uuid = entity_pair['src']
-                    dst_uuid = entity_pair['dst']
-                    cnt += 1
-                    sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
-                                                      uuid_to_edge_attrs)
-                    sub_g_embedding = sub_g_embedding_aggregation(sub_g)
-                    g_nodes_list.append((cnt, {"attr": sub_g_embedding}))
-                    # sub_g_list.append(sub_g)
-                    if cnt % 100000 == 0:
-                        print("{} sub_g is finished".format(cnt))
+                # attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+                # 这个判定条件移动到了find_entity_pair中
+                # if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
+                event_uuid = entity_pair['event']
+                src_uuid = entity_pair['src']
+                dst_uuid = entity_pair['dst']
+                cnt += 1
+                sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
+                                                  uuid_to_edge_attrs)
+                sub_g_embedding = sub_g_embedding_aggregation(sub_g)
+                g_nodes_list.append((cnt, {"attr": sub_g_embedding}))
+                # sub_g_list.append(sub_g)
+                if cnt % 100000 == 0:
+                    print("{} sub_g is finished".format(cnt))
     return g_nodes_list
+
+
 from collections import Counter
-# 将节点对整体之外的边添加到图中
-# from itertools import islice
+
+# 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
+from itertools import islice
+
+
 def graph_edge_construction(dataset):
-    g_edges_set=set()
+    g_edges_set = set()
     cnt = 0
     if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
         with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
@@ -616,22 +641,35 @@ def graph_edge_construction(dataset):
             map_a = defaultdict(list)
             map_b = defaultdict(list)
             for line in f:
-                cnt+=1
+                cnt += 1
                 event, src, dst, time = line.strip().split('\t')
                 hash_dst = hash(dst)
                 hash_src = hash(src)
-                map_a[hash_dst]=cnt
-                map_b[hash_src]=cnt
-            for hash_dst in tqdm(map_a,total=len(map_a)):
+                map_a[hash_dst].append(cnt)
+                map_b[hash_src].append(cnt)
+            for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
-                    event_src=map_a[hash_dst]
-                    event_dst=map_b[hash_dst]
-                    if event_src != event_dst and (event_src, event_dst) not in g_edges_set:  # 避免自环
-                        g_edges_set.add((event_src, event_dst))
-    # for edge in islice(g_edges_set, 100):
-    #     print(edge)
-    with open('./dataset/{}/g_edges_list.pkl'.format(dataset), 'wb') as f:
-        pkl.dump(list(g_edges_set), f)
+                    cnt_list_a = map_a[hash_dst]
+                    cnt_list_b = map_b[hash_dst]
+                    # 如果 cnt_list_a 或 cnt_list_b 的元素小于 100，则创建所有的边
+                    if len(cnt_list_a) < 100 and len(cnt_list_b) < 100:
+                        for event_src in cnt_list_a:
+                            for event_dst in cnt_list_b:
+                                if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
+                                    g_edges_set.add((event_src, event_dst))
+                    else:
+                        # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 20 条数据
+                        sampled_a = random.sample(cnt_list_a, min(100, len(cnt_list_a)))
+                        sampled_b = random.sample(cnt_list_b, min(100, len(cnt_list_b)))
+
+                        for event_src in sampled_a:
+                            for event_dst in sampled_b:
+                                if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
+                                    g_edges_set.add((event_src, event_dst))
+            with open('./dataset/{}/g_edges_list.pkl'.format(dataset), 'wb') as f:
+                pkl.dump(list(g_edges_set), f)
+
+
 # 对每个节点对进行处理，构建子图
 def graph_node_construction(dataset):
     graph = nx.DiGraph()
@@ -641,38 +679,30 @@ def graph_node_construction(dataset):
     if os.path.exists('./dataset/{}/uuid_to_attrs.pkl'.format(dataset)):
         with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'rb') as f:
             uuid_to_node_attrs, uuid_to_edge_attrs = pkl.load(f)
-
         id_entity_map, cnt_record_map = get_maps(dataset)
-        # sub_g_embedding_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map)
         g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
                                                     cnt_record_map)
         print("g_nodes_list is ready")
-        # g_edges_list = graph_edge_construction(dataset)
-        # print("g_edges_list is ready")
-        # graph.add_nodes_from(g_nodes_list)
-        # graph.add_edges_from(g_edges_list)
     else:
         raise NotImplementedError("There is not pkl file")
-    # graph_node_embedding(graph_list)
-    # graph_edge_construction(dataset,edges_set,cnt_record_map)
-    # G.add_edges_from(edges_set)
-    # with open('./dataset/{}/graph.pkl'.format(dataset), 'wb') as f:
-    #     pkl.dump(nx.node_link_data(graph), f)
     with open('./dataset/{}/g_nodes_list.pkl'.format(dataset), 'wb') as f:
         pkl.dump(g_nodes_list, f)
-# from collections import Counter
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
+    mode = args.mode
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
 
-    preprocess(dataset)
-    find_entity_pair(dataset)
+    # preprocess(dataset,mode) # 这里mode划分数据集
+    # find_entity_pair(dataset,mode) # 这里mode决定数据集中是否包含恶意节点
     # test(dataset)
     # get_attrs(dataset)
     # graph_node_construction(dataset)
     # graph_edge_construction(dataset)
+    load_darpa_dataset(dataset)
