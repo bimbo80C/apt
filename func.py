@@ -17,6 +17,9 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import random
 from loaddata import load_darpa_dataset
+from model import GCNModel
+from torch.optim import Adam
+
 metadata = {
     'trace': {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
@@ -94,7 +97,7 @@ name_map = {
 }
 
 
-# TODO 将全部的节点属性进行一个if判断作为图嵌入向量部分的输入
+# TODO 将写死train的地方修改为format test
 ###############
 # 提取每个属性到TXT，生成id_entity_map.json即uuid和类型的映射
 ###############
@@ -254,6 +257,7 @@ def preprocess(dataset, mode):
             fw_memory.close()
             fw_unnamed.close()
             fw_event.close()
+            # 从每一个文件当中提取字段
     if len(id_entity_map) != 0:
         fw_id_entity_map = open('./dataset/{}/'.format(dataset) + 'id_entity_map.json', 'w', encoding='utf-8')
         json.dump(id_entity_map, fw_id_entity_map)
@@ -282,6 +286,7 @@ def find_entity_pair(dataset, mode):
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
+                # 训练的时候只用正常的数据进行训练
                 if mode == 'train':
                     if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
                         continue
@@ -626,10 +631,7 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
     return g_nodes_list
 
 
-from collections import Counter
-
 # 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
-from itertools import islice
 
 
 def graph_edge_construction(dataset):
@@ -658,7 +660,7 @@ def graph_edge_construction(dataset):
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
                     else:
-                        # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 20 条数据
+                        # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 20 条数据 ？100条
                         sampled_a = random.sample(cnt_list_a, min(100, len(cnt_list_a)))
                         sampled_b = random.sample(cnt_list_b, min(100, len(cnt_list_b)))
 
@@ -689,6 +691,18 @@ def graph_node_construction(dataset):
         pkl.dump(g_nodes_list, f)
 
 
+def train(model, g, epochs=100, lr=0.01):
+    optimizer = Adam(model.parameters(), lr=lr)
+    for epoch in tqdm(range(epochs), desc="Training"):
+        model.train()
+        optimizer.zero_grad()
+        loss = model(g)
+        loss.backward()
+        optimizer.step()
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
@@ -701,8 +715,22 @@ if __name__ == '__main__':
 
     # preprocess(dataset,mode) # 这里mode划分数据集
     # find_entity_pair(dataset,mode) # 这里mode决定数据集中是否包含恶意节点
-    # test(dataset)
     # get_attrs(dataset)
     # graph_node_construction(dataset)
     # graph_edge_construction(dataset)
-    load_darpa_dataset(dataset)
+    train_g = load_darpa_dataset(dataset)
+    features = train_g.ndata['attr']
+    in_dim = features.shape[1]  # in_dim = 128
+    hidden_dim = 64
+    num_layers = 2
+    model = GCNModel(in_dim, hidden_dim, num_layers)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_g = train_g.to(device)
+    model = model.to(device)
+    train(model, train_g)
+
+
+
+
+
+
