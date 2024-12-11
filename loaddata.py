@@ -22,17 +22,20 @@ def load_darpa_dataset(dataset,feature_dim=128):
     feature_map = {}
     for node in g_nodes_list:
         feature_map[node[0]]=node[1]["attr"]
-    # g = dgl.DGLGraph()
-    # print(len(feature_map))
-    # print(len(g_edges_list))
-    # g.ndata['feat'] = torch.zeros((g.number_of_nodes(), feature_dim))
     g=nx.DiGraph()
     for edge in g_edges_list:
         g.add_node(edge[0],attr=feature_map[edge[0]])
         g.add_node(edge[1],attr=feature_map[edge[1]])
         g.add_edge(edge[0], edge[1])
-        # print(edge[0])
     train_g = dgl.from_networkx(g,node_attrs=['attr'])
+    # 获取所有节点的入度
+    in_degrees = train_g.in_degrees()  # 返回一个包含所有节点入度的张量
+
+    # 统计入度为 0 的节点个数
+    zero_in_degree_count = (in_degrees == 0).sum().item()
+
+    print(f"Number of nodes with zero in-degree: {zero_in_degree_count}")
+    train_g = dgl.add_self_loop(train_g) # 添加自环
     for i in range(3):
         print(f"节点 {i} 的属性: {train_g.ndata['attr'][i]}")
     # g = dgl.graph((src_nodes, dst_nodes))
@@ -40,6 +43,7 @@ def load_darpa_dataset(dataset,feature_dim=128):
     # print(g)
     end_time = time.time()  # 记录结束时间
     print(f"Time taken to load and process dataset: {end_time - start_time:.4f} seconds")  # 输出运行时间
+    return train_g
     # for i in range(g.num_nodes()):
     #     print(f"Node {i} features: {g.ndata['feat'][i]}")
     # return g
