@@ -6,20 +6,27 @@ import pickle as pkl
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import roc_auc_score, precision_recall_curve
 from model import GCNModel
+import argparse
+from loaddata import load_darpa_dataset
 
+def set_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.determinstic = True
 
 def evaluate_using_knn(dataset, x_train, x_test, y_test):
-    """
-    x_train 训练knn的数据
-    x_test
-    y_test
-    """
     # 对训练数据和测试数据进行归一化，然后使用 K 近邻算法（KNN）对训练数据进行拟合
     x_train_mean = x_train.mean(axis=0)
     x_train_std = x_train.std(axis=0)
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
-    n_neighbors = 10
+    if dataset == 'cadets':
+        n_neighbors = 200
+    else:
+        n_neighbors = 10
     nbrs = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1)
     nbrs.fit(x_train)  # 使用训练数据 x_train 拟合 K 近邻模型
 
@@ -82,50 +89,55 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     print('FP: {}'.format(fp))
     return auc, 0.0, None, None
 
-
-def eval(dataset):
-    """
-    测试逻辑
-    应该要有一个test_g的输入
-    """
-    in_dim = 128
-    hidden_dim = 32  # 暂时
-    num_layers = 2
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
+    parser.add_argument("--dataset", type=str, default="trace")
+    args = parser.parse_args()
+    dataset = args.dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = GCNModel(in_dim, hidden_dim, num_layers)
-    model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset_name), map_location=device))
+
+    hidden_dim = 64
+    num_layers = 2
+    set_random_seed(0)
+    in_dim = 128
+
+    model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
+    checkpoint = torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device)
+    # # 打印权重文件中的keys
+    # print("Checkpoint keys:")
+    # for key in checkpoint.keys():
+    #     print(key)
+    # # 打印当前模型的state_dict keys
+    # print("\nModel state_dict keys:")
+    # for key in model.state_dict().keys():
+    #     print(key)
+    model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
     model = model.to(device)
     model.eval()
-
-    # malicious, _ = metadata['malicious']
-    # n_train = metadata['n_train']
-    # n_test = metadata['n_test']
-
+    malicious_list=[]
+    if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset,)):
+        with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
+            malicious_list = pkl.load(f)
+    # print(len(malicious_list))
+    #准备好knn的输入
     with torch.no_grad():
-        x_train = []
-        for i in range(n_train):
-            g = load_entity_level_dataset(dataset, 'train', i).to(device)
-            x_train.append(model.embed(g).cpu().numpy())  # x_train是有load_entity_level_dataset的输出构成的列表
-            del g
-        x_train = np.concatenate(x_train, axis=0)
         skip_benign = 0
-        x_test = []
-        for i in range(n_test):
-            g = load_entity_level_dataset(dataset, 'test', i).to(device)
-            # Exclude training samples from the test set
-            if i != n_test - 1:
-                skip_benign += g.number_of_nodes()
-            x_test.append(model.embed(g).cpu().numpy())
-            del g
-        x_test = np.concatenate(x_test, axis=0)
+        g = load_darpa_dataset(dataset, mode='train').to(device)
 
-        n = x_test.shape[0]
-        y_test = np.zeros(n)
-        y_test[malicious] = 1.0  # y_test 数组 正常为0 异常为1
-        malicious_dict = {}
-        for i, m in enumerate(malicious):
-            malicious_dict[m] = i  # ？
-
+        x_train=model.embed(g).cpu().numpy()
+        print('trained embed is loaded')
+        skip_benign += g.number_of_nodes()
+        del g
+        skip_benign = 0
+        g = load_darpa_dataset(dataset, mode = 'test').to(device)
+        x_test=model.embed(g).cpu().numpy()
+        print('embed for test is loaded')
+        del g
+        n = x_test.shape[0]  # 测试集样本数量
+        print(n)
+        print(malicious_list)
+        y_test = np.zeros(n)  # 测试集标签
+        y_test[malicious_list] = 1.0
         # Exclude training samples from the test set
         test_idx = []
         for i in range(x_test.shape[0]):
@@ -134,6 +146,6 @@ def eval(dataset):
         result_x_test = x_test[test_idx]
         result_y_test = y_test[test_idx]
         del x_test, y_test
-        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test, result_y_test)
+        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test,
+                                                                   result_y_test)
     print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")
-    return

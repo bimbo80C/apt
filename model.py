@@ -5,6 +5,7 @@ import dgl
 from dgl.nn.pytorch import GraphConv
 
 class GCNModel(nn.Module):
+    # init is ok
     def __init__(self, in_dim, hidden_dim, num_layers, mask_rate=0.3):
         super(GCNModel, self).__init__()
         self.mask_rate = mask_rate
@@ -14,13 +15,19 @@ class GCNModel(nn.Module):
         self.decoder = nn.Linear(hidden_dim, in_dim)
         self.mask_token = nn.Parameter(torch.zeros(1, in_dim, dtype=torch.float32))  # 设置为 torch.float32
 
+    def embed(self, g):
+        x = g.ndata['attr'].to(g.device)
+        for layer in self.encoder:
+            x = layer(g, x)
+        return x
+
     def forward(self, g):
         loss = self.compute_loss(g)
         return loss
 
     def compute_loss(self, g):
         masked_g, (mask_nodes, _) = self.mask_nodes(g, self.mask_rate)
-        h = masked_g.ndata['attr'].float()  # 确保输入特征为 float32
+        h = masked_g.ndata['attr'].float()  # 确保输入特征为 float32,从掩码图中获取节点属性
         for layer in self.encoder:
             h = layer(masked_g, h)
         recon_features = self.decoder(h)
@@ -28,6 +35,7 @@ class GCNModel(nn.Module):
         x_original = g.ndata['attr'][mask_nodes].float()  # 保持输入一致
         x_reconstructed = recon_features[mask_nodes]
         feature_loss = F.mse_loss(x_reconstructed, x_original)
+        print(feature_loss)
         return feature_loss
 
     def mask_nodes(self, g, mask_rate):

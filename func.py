@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pickle as pkl
-from sub_g_encoding import sub_g_encoding
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 import torch
 import dgl
@@ -16,9 +16,6 @@ from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import random
-from loaddata import load_darpa_dataset
-from model import GCNModel
-from torch.optim import Adam
 
 metadata = {
     'trace': {
@@ -108,14 +105,14 @@ def preprocess(dataset, mode):
         if file in metadata[dataset][mode]:
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
-            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
-            fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
-            fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
-            fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
-            fw_netflow = open('./dataset/{}/'.format(dataset) + 'attr_netflow.txt', 'a', encoding='utf-8')
-            fw_memory = open('./dataset/{}/'.format(dataset) + 'attr_memory.txt', 'a', encoding='utf-8')
-            fw_unnamed = open('./dataset/{}/'.format(dataset) + 'attr_unnamed.txt', 'a', encoding='utf-8')
-            fw_event = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'a', encoding='utf-8')
+            fw_src = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_src.txt', 'a', encoding='utf-8')
+            fw_principal = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_principal.txt', 'a', encoding='utf-8')
+            fw_subject = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_subject.txt', 'a', encoding='utf-8')
+            fw_file = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_file.txt', 'a', encoding='utf-8')
+            fw_netflow = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_netflow.txt', 'a', encoding='utf-8')
+            fw_memory = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_memory.txt', 'a', encoding='utf-8')
+            fw_unnamed = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_unnamed.txt', 'a', encoding='utf-8')
+            fw_event = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_event.txt', 'a', encoding='utf-8')
             for line in tqdm(f):
                 # 这几种不需要关注 few information
                 if 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
@@ -259,12 +256,13 @@ def preprocess(dataset, mode):
             fw_event.close()
             # 从每一个文件当中提取字段
     if len(id_entity_map) != 0:
-        fw_id_entity_map = open('./dataset/{}/'.format(dataset) + 'id_entity_map.json', 'w', encoding='utf-8')
+        fw_id_entity_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'id_entity_map.json', 'w', encoding='utf-8')
         json.dump(id_entity_map, fw_id_entity_map)
         fw_id_entity_map.close()
 
 
 # 找出所有的节点对
+
 def find_entity_pair(dataset, mode):
     record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
     entity_pairs = []
@@ -275,14 +273,14 @@ def find_entity_pair(dataset, mode):
     malicious_entities = set()
     for l in f.readlines():
         malicious_entities.add(l.lstrip().rstrip())
-    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
-        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
+    if os.path.exists('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode)):
+        with open('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
-    for file in os.listdir('./dataset/{}/'.format(dataset)):
+    for file in os.listdir('./dataset/{}/{}/'.format(dataset, mode)):
         if 'event' in file:  # attr_event.txt
-            # fw_entity_pair = open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', 'w', encoding='utf-8')
+            # fw_entity_pair = open('./dataset/{}/{}/'.format(dataset,mode) + 'entity_pair.txt', 'w', encoding='utf-8')
             print('searching behavior entity pair {} ...'.format(file))
-            f = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'r', encoding='utf-8')
+            f = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_event.txt', 'r', encoding='utf-8')
             for l in f.readlines():
                 split_line = l.split('\t')
                 uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
@@ -344,19 +342,21 @@ def find_entity_pair(dataset, mode):
                                 record_cnt_map[dst2]) + '\t' + str(time)
                             entity_pairs.append(entity_pair)
             entity_pairs.sort(key=lambda l: l[4])
-            with open('./dataset/{}/'.format(dataset) + 'entity_pair.txt', "w") as fw_entity_pair:
+            with open('./dataset/{}/{}/'.format(dataset, mode) + 'entity_pair.txt', "w") as fw_entity_pair:
                 for pair in entity_pairs:
                     fw_entity_pair.write(f"{pair}")
             fw_entity_pair.close()
             # finish the entity_pair.txt
     if len(record_cnt_map) != 0:
-        fw_record_cnt_map = open('./dataset/{}/'.format(dataset) + 'record_cnt_map.json', 'w', encoding='utf-8')
+        fw_record_cnt_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'record_cnt_map.json', 'w',
+                                 encoding='utf-8')
         json.dump(record_cnt_map, fw_record_cnt_map)
         fw_record_cnt_map.close()
         # finish the record_map.txt
         cnt_record_map = {str(v): k for k, v in record_cnt_map.items()}
         # reverse
-        fw_cnt_record_map = open('./dataset/{}/'.format(dataset) + 'cnt_record_map.json', 'w', encoding='utf-8')
+        fw_cnt_record_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'cnt_record_map.json', 'w',
+                                 encoding='utf-8')
         json.dump(cnt_record_map, fw_cnt_record_map)
         fw_cnt_record_map.close()
         # finish the count_record.txt
@@ -440,12 +440,12 @@ def get_embedding(df, attr_type):
         raise NotImplementedError("This type is not included")
 
 
-def get_attrs(dataset):
+def get_attrs(dataset, mode):
     # entity == subject
     uuid_to_node_attrs = {}
     uuid_to_edge_attrs = {}
-    if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
-        with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_sub:
+    if os.path.exists('./dataset/{}/{}/attr_subject.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/attr_subject.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_sub:
             df = pd.read_csv(f_sub,
                              sep='\t',
                              names=['uuid', 'record', 'subject_type', 'parent',
@@ -454,8 +454,8 @@ def get_attrs(dataset):
             df = get_cnt(df, 'subject_type')
             df = get_embedding(df, 'cmdline')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-    if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
-        with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
+    if os.path.exists('./dataset/{}/{}/attr_file.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/attr_file.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
                              sep='\t',
                              names=['uuid', 'record', 'file_type', 'epoch',
@@ -463,8 +463,8 @@ def get_attrs(dataset):
             df = get_cnt(df, 'file_type')
             df = get_embedding(df, 'path')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-    if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
-        with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as f_netflow:
+    if os.path.exists('./dataset/{}/{}/attr_netflow.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/attr_netflow.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_netflow:
             df = pd.read_csv(f_netflow,
                              sep='\t',
                              names=['uuid', 'record', 'epoch',
@@ -479,8 +479,8 @@ def get_attrs(dataset):
             df = get_cnt(df, 'remote_port')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
-    if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
-        with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem:
+    if os.path.exists('./dataset/{}/{}/attr_memory.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/attr_memory.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_mem:
             df = pd.read_csv(f_mem,
                              sep='\t',
                              names=['uuid', 'record', 'epoch',
@@ -498,8 +498,8 @@ def get_attrs(dataset):
     #                          )
     #         uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
-    if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
-        with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
+    if os.path.exists('./dataset/{}/{}/attr_event.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/attr_event.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_event:
             df = pd.read_csv(f_event,
                              sep='\t',
                              names=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'src', 'dst1', 'dst2', 'size',
@@ -509,17 +509,18 @@ def get_attrs(dataset):
                              )
             df = get_cnt(df, 'event_type')
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
-    with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
+    with open('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
 
 
-def get_maps(dataset):
-    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
-        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
+def get_maps(dataset, mode):
+    if os.path.exists('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode)):
+        with open('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode), 'r', encoding='utf-8') as f_id_entity_map:
             print('loading id_entity_map')
             id_entity_map = json.load(f_id_entity_map)
-    if os.path.exists('./dataset/{}/cnt_record_map.json'.format(dataset)):
-        with open('./dataset/{}/cnt_record_map.json'.format(dataset), 'r', encoding='utf-8') as f_cnt_record_map:
+    if os.path.exists('./dataset/{}/{}/cnt_record_map.json'.format(dataset, mode)):
+        with open('./dataset/{}/{}/cnt_record_map.json'.format(dataset, mode), 'r',
+                  encoding='utf-8') as f_cnt_record_map:
             print('loading cnt_record_map')
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
@@ -599,13 +600,18 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
     return sub_g_embedding
 
 
-def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map):
-    sub_g_list = []
+# 20241216加入在test的mode下，要输出一个malicious节点对编号列表的功能
+def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode):
     cnt = 0
-    sub_g_embedding_list = []
     g_nodes_list = []
-    if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
-        with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
+    malicious_cnt_list = []
+    malicious_entities = './groundtruth/{}.txt'.format(dataset)
+    f = open(malicious_entities, 'r')
+    malicious_entities = set()
+    for l in f.readlines():
+        malicious_entities.add(l.lstrip().rstrip())
+    if os.path.exists('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode), 'r', encoding='utf-8') as f:
             print('loading event_list for sub_g_construction')
             for line in tqdm(f):
                 event = line.strip().split('\t')
@@ -621,6 +627,9 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                 src_uuid = entity_pair['src']
                 dst_uuid = entity_pair['dst']
                 cnt += 1
+                if mode == 'test':
+                    if src_uuid in malicious_entities or dst_uuid in malicious_entities:
+                        malicious_cnt_list.append(cnt)
                 sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
                                                   uuid_to_edge_attrs)
                 sub_g_embedding = sub_g_embedding_aggregation(sub_g)
@@ -628,17 +637,17 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                 # sub_g_list.append(sub_g)
                 if cnt % 100000 == 0:
                     print("{} sub_g is finished".format(cnt))
+            pkl.dump(malicious_cnt_list, open('./dataset/{}/test/malicious.pkl'.format(dataset), 'wb'))
     return g_nodes_list
 
 
 # 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
 
-
-def graph_edge_construction(dataset):
+def graph_edge_construction(dataset, mode):
     g_edges_set = set()
     cnt = 0
-    if os.path.exists('./dataset/{}/entity_pair.txt'.format(dataset)):
-        with open('./dataset/{}/entity_pair.txt'.format(dataset), 'r', encoding='utf-8') as f:
+    if os.path.exists('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode)):
+        with open('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode), 'r', encoding='utf-8') as f:
             print('processing g_edges_list')
             map_a = defaultdict(list)
             map_b = defaultdict(list)
@@ -660,7 +669,7 @@ def graph_edge_construction(dataset):
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
                     else:
-                        # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 20 条数据 ？100条
+                        # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 100 条数据
                         sampled_a = random.sample(cnt_list_a, min(100, len(cnt_list_a)))
                         sampled_b = random.sample(cnt_list_b, min(100, len(cnt_list_b)))
 
@@ -668,45 +677,33 @@ def graph_edge_construction(dataset):
                             for event_dst in sampled_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
-            with open('./dataset/{}/g_edges_list.pkl'.format(dataset), 'wb') as f:
+            with open('./dataset/{}/{}/g_edges_list.pkl'.format(dataset, mode), 'wb') as f:
                 pkl.dump(list(g_edges_set), f)
 
 
 # 对每个节点对进行处理，构建子图
-def graph_node_construction(dataset):
+def graph_node_construction(dataset, mode):
     graph = nx.DiGraph()
     sub_g_embedding_list = []
     uuid_to_node_attrs = {}
     uuid_to_edge_attrs = {}
-    if os.path.exists('./dataset/{}/uuid_to_attrs.pkl'.format(dataset)):
-        with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'rb') as f:
+    if os.path.exists('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode)):
+        with open('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode), 'rb') as f:
             uuid_to_node_attrs, uuid_to_edge_attrs = pkl.load(f)
-        id_entity_map, cnt_record_map = get_maps(dataset)
+        id_entity_map, cnt_record_map = get_maps(dataset, mode)
         g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
-                                                    cnt_record_map)
+                                                    cnt_record_map, mode)
         print("g_nodes_list is ready")
     else:
         raise NotImplementedError("There is not pkl file")
-    with open('./dataset/{}/g_nodes_list.pkl'.format(dataset), 'wb') as f:
+    with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset, mode), 'wb') as f:
         pkl.dump(g_nodes_list, f)
-
-
-def train(model, g, epochs=100, lr=0.01):
-    optimizer = Adam(model.parameters(), lr=lr)
-    for epoch in tqdm(range(epochs), desc="Training"):
-        model.train()
-        optimizer.zero_grad()
-        loss = model(g)
-        loss.backward()
-        optimizer.step()
-        if (epoch + 1) % 10 == 0:
-            print(f"Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="train")
+    parser.add_argument("--mode", type=str, default="test")
     args = parser.parse_args()
     dataset = args.dataset
     mode = args.mode
@@ -715,22 +712,6 @@ if __name__ == '__main__':
 
     # preprocess(dataset,mode) # 这里mode划分数据集
     # find_entity_pair(dataset,mode) # 这里mode决定数据集中是否包含恶意节点
-    # get_attrs(dataset)
-    # graph_node_construction(dataset)
-    # graph_edge_construction(dataset)
-    train_g = load_darpa_dataset(dataset)
-    features = train_g.ndata['attr']
-    in_dim = features.shape[1]  # in_dim = 128
-    hidden_dim = 64
-    num_layers = 2
-    model = GCNModel(in_dim, hidden_dim, num_layers)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_g = train_g.to(device)
-    model = model.to(device)
-    train(model, train_g)
-
-
-
-
-
-
+    # get_attrs(dataset,mode)
+    graph_node_construction(dataset, mode)
+    graph_edge_construction(dataset, mode)
