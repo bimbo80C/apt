@@ -5,9 +5,13 @@ import random
 import pickle as pkl
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import roc_auc_score, precision_recall_curve
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 from model import GCNModel
 import argparse
 from loaddata import load_darpa_dataset
+from sklearn.manifold import TSNE
+
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -16,6 +20,7 @@ def set_random_seed(seed):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.determinstic = True
+
 
 def evaluate_using_knn(dataset, x_train, x_test, y_test):
     # 对训练数据和测试数据进行归一化，然后使用 K 近邻算法（KNN）对训练数据进行拟合
@@ -35,10 +40,14 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     if not os.path.exists(save_dict_path):
         idx = list(range(x_train.shape[0]))
         random.shuffle(idx)
-        distances, _ = nbrs.kneighbors(x_train[idx][:min(50000, x_train.shape[0])], n_neighbors=n_neighbors)
+        print("begin knn model training")
+        # tree = KDTree(x_train)
+        # distances, _ = tree.query(x_train[idx][:min(50000, x_train.shape[0])], k=n_neighbors)
+        distances, _ = nbrs.kneighbors(x_train[idx][:min(500, x_train.shape[0])], n_neighbors=n_neighbors)
         del x_train
         mean_distance = distances.mean()
         del distances
+        # distances, _ = tree.query(x_test, k=n_neighbors)
         distances, _ = nbrs.kneighbors(x_test, n_neighbors=n_neighbors)
         save_dict = [mean_distance, distances.mean(axis=1)]
         distances = distances.mean(axis=1)
@@ -47,6 +56,7 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     else:
         with open(save_dict_path, 'rb') as f:
             mean_distance, distances = pkl.load(f)
+    print('knn for eval is loaded')
     score = distances / mean_distance  # 异常分数 score越大越可能异常
     del distances
     auc = roc_auc_score(y_test, score)  # 计算AUC分数
@@ -89,63 +99,87 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     print('FP: {}'.format(fp))
     return auc, 0.0, None, None
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
     parser.add_argument("--dataset", type=str, default="trace")
     args = parser.parse_args()
     dataset = args.dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    print("device is {}".format(device))
     hidden_dim = 64
     num_layers = 2
     set_random_seed(0)
     in_dim = 128
 
     model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
-    checkpoint = torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device)
-    # # 打印权重文件中的keys
-    # print("Checkpoint keys:")
-    # for key in checkpoint.keys():
-    #     print(key)
-    # # 打印当前模型的state_dict keys
-    # print("\nModel state_dict keys:")
-    # for key in model.state_dict().keys():
-    #     print(key)
+    # checkpoint = torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device)
     model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
     model = model.to(device)
     model.eval()
-    malicious_list=[]
-    if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset,)):
+    #太多了筛选一下
+
+    malicious_list = []
+    if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
         with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
             malicious_list = pkl.load(f)
-    # print(len(malicious_list))
-    #准备好knn的输入
+    # 准备好knn的输入
     with torch.no_grad():
         skip_benign = 0
-        g = load_darpa_dataset(dataset, mode='train').to(device)
-
-        x_train=model.embed(g).cpu().numpy()
+        g = load_darpa_dataset(dataset).to(device)
+        x_train = model.embed(g).cpu().numpy()
         print('trained embed is loaded')
+
         skip_benign += g.number_of_nodes()
         del g
         skip_benign = 0
-        g = load_darpa_dataset(dataset, mode = 'test').to(device)
-        x_test=model.embed(g).cpu().numpy()
+        g = load_darpa_dataset(dataset, mode='test').to(device)
+        x_test = model.embed(g).cpu().numpy()
         print('embed for test is loaded')
         del g
-        n = x_test.shape[0]  # 测试集样本数量
-        print(n)
-        print(malicious_list)
-        y_test = np.zeros(n)  # 测试集标签
-        y_test[malicious_list] = 1.0
-        # Exclude training samples from the test set
-        test_idx = []
-        for i in range(x_test.shape[0]):
-            if i >= skip_benign or y_test[i] == 1.0:
-                test_idx.append(i)
-        result_x_test = x_test[test_idx]
-        result_y_test = y_test[test_idx]
-        del x_test, y_test
-        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test,
-                                                                   result_y_test)
-    print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")
+        print(x_train.shape[0])
+        print(x_train.shape[1])
+        print(x_train.dtype)
+        print(len(malicious_list))
+        print(x_test.shape[0])
+        tsne = TSNE(n_components=2, random_state=42)
+        # 合并训练集和测试集以确保降维时不会出现信息丢失
+
+        num_samples = 30000  # 例如选择 30 万条数据
+        # 从训练集和测试集分别采样 30 万条
+        indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
+        indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
+        x_train_sampled = x_train[indices_train]
+        x_test_sampled = x_test[indices_test]
+        # 使用 t-SNE 对训练集和测试集的特征进行降维
+        x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
+        x_all_embedded = tsne.fit_transform(x_all_sampled)
+        # 将降维后的结果分开成训练集和测试集
+        x_train_embedded = x_all_embedded[:num_samples]
+        x_test_embedded = x_all_embedded[num_samples:]
+        # 绘制 2D 散点图
+        plt.figure(figsize=(8, 6))
+        # 绘制训练集的散点图，使用不同颜色表示不同数据
+        plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+        # 绘制测试集的散点图
+        plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+        # 设置图例
+        plt.legend()
+        # 设置标题
+        plt.title("t-SNE Visualization of Train and Test Embeddings")
+        # 显示图形
+        plt.show()
+    #     n = x_test.shape[0]  # 测试集样本数量
+    #     y_test = np.zeros(n)  # 测试集标签
+    #     y_test[malicious_list] = 1.0
+    #     # Exclude training samples from the test set
+    #     test_idx = []
+    #     for i in tqdm(range(x_test.shape[0]),total=len(x_test)):
+    #         if i >= skip_benign or y_test[i] == 1.0:
+    #             test_idx.append(i)
+    #     result_x_test = x_test[test_idx]
+    #     result_y_test = y_test[test_idx]
+    #     del x_test, y_test
+    #     test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test,
+    #                                                                result_y_test)
+    # print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")

@@ -262,30 +262,42 @@ def get_cnt(df, attr_type):
 from collections import defaultdict, Counter
 from tqdm import tqdm
 if __name__ == "__main__":
-    dataset='trace'
-    g_edges_list = []
-    cnt = 0
-    if os.path.exists('./dataset/{}/entity_pair1.txt'.format(dataset)):
-        with open('./dataset/{}/entity_pair1.txt'.format(dataset), 'r', encoding='utf-8') as f:
-            print('processing g_edges_list')
-            map_a = defaultdict(list)
-            map_b = defaultdict(list)
-            for line in f:
-                cnt += 1
-                event, src, dst, time = line.strip().split('\t')
-                hash_dst = hash(dst)
-                hash_src = hash(src)
-                map_a[hash_dst] = cnt
-                map_b[hash_src] = cnt
-                if cnt >10:
-                    break
-            print(map_a)
-            print(map_b)
-            for hash_dst in tqdm(map_a, total=len(map_a)):
-                if hash_dst in map_b:
-                    event_src = map_a[hash_dst]
-                    event_dst = map_b[hash_dst]
-                    if event_src != event_dst and (event_src, event_dst) not in g_edges_list:  # 避免自环
-                        g_edges_list.append((event_src, event_dst))
+    np.random.seed(42)  # 设置随机种子，确保结果可重复
+    x_train = np.random.rand(1000, 10)  # 随机生成一个 1000x10 的数组
+    idx = list(range(x_train.shape[0]))
+    # 打乱 x_train 的索引
 
-            print(g_edges_list)
+    # 获取前 min(50000, x_train.shape[0]) 个样本的切片
+    sample_size = min(2, x_train.shape[0])  # 如果 x_train 的样本数小于 50000，则选择所有样本
+    subset = x_train[idx][:sample_size]  # 使用 idx 索引并进行切片
+
+    # 输出结果
+    print("Subset shape:", subset.shape)
+    print("Subset data preview:\n", subset[:10])  #
+    # dataset='trace'
+    # g_edges_list = []
+    # cnt = 0
+    # if os.path.exists('./dataset/{}/entity_pair1.txt'.format(dataset)):
+    #     with open('./dataset/{}/entity_pair1.txt'.format(dataset), 'r', encoding='utf-8') as f:
+    #         print('processing g_edges_list')
+    #         map_a = defaultdict(list)
+    #         map_b = defaultdict(list)
+    #         for line in f:
+    #             cnt += 1
+    #             event, src, dst, time = line.strip().split('\t')
+    #             hash_dst = hash(dst)
+    #             hash_src = hash(src)
+    #             map_a[hash_dst] = cnt
+    #             map_b[hash_src] = cnt
+    #             if cnt >10:
+    #                 break
+    #         print(map_a)
+    #         print(map_b)
+    #         for hash_dst in tqdm(map_a, total=len(map_a)):
+    #             if hash_dst in map_b:
+    #                 event_src = map_a[hash_dst]
+    #                 event_dst = map_b[hash_dst]
+    #                 if event_src != event_dst and (event_src, event_dst) not in g_edges_list:  # 避免自环
+    #                     g_edges_list.append((event_src, event_dst))
+    #
+    #         print(g_edges_list)

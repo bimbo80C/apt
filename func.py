@@ -22,7 +22,7 @@ metadata = {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
                   'ta1-trace-e3-official-1.json.3'],
         'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']
+                 'ta1-trace-e3-official-1.json.3'] # 'ta1-trace-e3-official-1.json.4'
     },
     'theia': {
         'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
@@ -528,9 +528,11 @@ def get_maps(dataset, mode):
 
 def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs):
     sub_g = nx.DiGraph()
-    key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
-                     'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    # key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
+    #                  'event_type']  # 对应subject,file,netflow,memory,event核心信息
+    # detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
+    detail_attr_dict = ['cmdline', 'file_type']
     # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
     #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、remote_port、ip_protocol
     cnt_node = 0
@@ -590,6 +592,8 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
             processed_types[attr_name] = attr_value
     node_embeddings = []
     for attr_name, attr_value in processed_types.items():
+        # if 'type' not in attr_name: # 只保留type测试
+        #     continue
         if isinstance(attr_value, torch.Tensor):
             node_embeddings.append(attr_value)
         else:
@@ -600,7 +604,6 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
     return sub_g_embedding
 
 
-# 20241216加入在test的mode下，要输出一个malicious节点对编号列表的功能
 def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode):
     cnt = 0
     g_nodes_list = []
@@ -627,8 +630,11 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                 src_uuid = entity_pair['src']
                 dst_uuid = entity_pair['dst']
                 cnt += 1
+                # if mode == 'test':
+                #     if src_uuid in malicious_entities or dst_uuid in malicious_entities:
+                #         malicious_cnt_list.append(cnt)
                 if mode == 'test':
-                    if src_uuid in malicious_entities or dst_uuid in malicious_entities:
+                    if src_uuid in malicious_entities and src_uuid:
                         malicious_cnt_list.append(cnt)
                 sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
                                                   uuid_to_edge_attrs)
@@ -683,22 +689,20 @@ def graph_edge_construction(dataset, mode):
 
 # 对每个节点对进行处理，构建子图
 def graph_node_construction(dataset, mode):
-    graph = nx.DiGraph()
-    sub_g_embedding_list = []
     uuid_to_node_attrs = {}
     uuid_to_edge_attrs = {}
+    g_nodes_list = []
     if os.path.exists('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode)):
         with open('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode), 'rb') as f:
             uuid_to_node_attrs, uuid_to_edge_attrs = pkl.load(f)
-        id_entity_map, cnt_record_map = get_maps(dataset, mode)
-        g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
-                                                    cnt_record_map, mode)
-        print("g_nodes_list is ready")
     else:
         raise NotImplementedError("There is not pkl file")
+    id_entity_map, cnt_record_map = get_maps(dataset, mode)
+    g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
+                                                cnt_record_map, mode)
+    print("g_nodes_list is ready")
     with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset, mode), 'wb') as f:
         pkl.dump(g_nodes_list, f)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
@@ -715,3 +719,4 @@ if __name__ == '__main__':
     # get_attrs(dataset,mode)
     graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
+

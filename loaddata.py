@@ -10,25 +10,26 @@ def load_darpa_dataset(dataset,feature_dim=128,mode='train'):
     start_time = time.time()  # 记录开始时间
     g_nodes_list = []
     g_edges_list = []
-    if os.path.exists('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode)):
-        with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode), 'rb') as f:
-            g_nodes_list = pkl.load(f)
     if os.path.exists('./dataset/{}/{}/g_edges_list.pkl'.format(dataset,mode)):
         with open('./dataset/{}/{}/g_edges_list.pkl'.format(dataset,mode), 'rb') as f:
             g_edges_list = pkl.load(f)
+    if os.path.exists('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode)):
+        with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode), 'rb') as f:
+            g_nodes_list = pkl.load(f)
     g = nx.DiGraph()
     #Test whether all malicious nodes are covered
-    malicious_list = []
-    if_in_node=[]
-    node_list=[]
-    if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
-        with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
-            malicious_list = pkl.load(f)
-    for node in g_nodes_list:
-        node_list.append(node[0])
-    for malicious in malicious_list:
-        if malicious not in node_list:
-            if_in_node.append(malicious)
+    # malicious_list = []
+    # if_in_node=[]
+    # node_set=set()
+    # if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset)):
+    #     with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
+    #         malicious_list = pkl.load(f)
+    # for node in g_nodes_list:
+    #     node_set.add(node[0])
+    # for malicious in malicious_list:
+    #     if malicious not in node_set:
+    #         if_in_node.append(malicious)
+    # print(if_in_node)
     #===============================
     for node in g_nodes_list:
         g.add_node(node[0],attr=node[1]["attr"].float())

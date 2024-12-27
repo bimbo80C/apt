@@ -17,7 +17,7 @@ def train(model, g, lr, epochs=50):
         if (epoch + 1) % 10 == 0:
             print(f"Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}")
 
-
+import pickle as pkl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
     parser.add_argument("--dataset", type=str, default="trace")
