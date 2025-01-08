@@ -707,7 +707,7 @@ def graph_node_construction(dataset, mode):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="test")
+    parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
     mode = args.mode
@@ -719,4 +719,3 @@ if __name__ == '__main__':
     # get_attrs(dataset,mode)
     graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
-

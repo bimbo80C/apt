@@ -14,14 +14,21 @@ def train(model, g, lr, epochs=50):
         loss = model(g)
         loss.backward(retain_graph=True)
         optimizer.step()
+
+        # 打印第一个 epoch 的 loss
+        if epoch == 0:
+            print(f"Epoch [1/{epochs}], Initial Loss: {loss.item():.4f}")
+
+        # 每 10 个 epoch 打印一次 loss
         if (epoch + 1) % 10 == 0:
             print(f"Epoch [{epoch + 1}/{epochs}], Loss: {loss.item():.4f}")
+
 
 import pickle as pkl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="trains")
+    parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
     args = parser.parse_args()
@@ -29,6 +36,9 @@ if __name__ == '__main__':
     lr = args.lr
     train_g = load_darpa_dataset(dataset,mode='train')
     features = train_g.ndata['attr']
+    print(f"Feature shape: {features.shape}")  # 打印节点特征的形状
+    print(f"Number of nodes: {train_g.num_nodes()}")
+    print(f"Number of edges: {train_g.num_edges()}")
     in_dim = features.shape[1]  # in_dim = 128
     hidden_dim = 64
     num_layers = 2
@@ -38,4 +48,3 @@ if __name__ == '__main__':
     model = model.to(device)
     train(model, train_g, lr)
     torch.save(model.state_dict(), "./checkpoints/checkpoint-{}.pt".format(dataset))
-    save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
