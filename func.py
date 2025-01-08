@@ -865,4 +865,3 @@ if __name__ == '__main__':
     # get_attrs(dataset,mode)
     # graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
-

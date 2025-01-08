@@ -78,6 +78,12 @@ class GCNModel(nn.Module):
 
         x_original = g.ndata['attr'][mask_nodes].float()  # 保持输入一致
         x_reconstructed = recon_features[mask_nodes]
+        # DEBUG
+        print("x_reconstructed:", x_reconstructed)
+        print("x_reconstructed维度 (shape):", x_reconstructed.shape)
+        print("x_original:", x_original)
+        print("x_original维度 (shape):", x_original.shape)
+        #
         feature_loss = F.mse_loss(x_reconstructed, x_original)
         # print(feature_loss)
         return feature_loss
