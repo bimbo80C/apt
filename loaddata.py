@@ -16,7 +16,6 @@ def load_darpa_dataset(dataset,feature_dim=128,mode='train'):
     if os.path.exists('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode)):
         with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset,mode), 'rb') as f:
             g_nodes_list = pkl.load(f)
-    g = nx.DiGraph()
     #Test whether all malicious nodes are covered
     # malicious_list = []
     # if_in_node=[]
@@ -31,19 +30,23 @@ def load_darpa_dataset(dataset,feature_dim=128,mode='train'):
     #         if_in_node.append(malicious)
     # print(if_in_node)
     #===============================
-    for node in g_nodes_list:
-        g.add_node(node[0],attr=node[1]["attr"].float())
-    for edge in g_edges_list:
-        g.add_edge(edge[0], edge[1])
-    train_g = dgl.from_networkx(g,node_attrs=['attr'])
-    # 获取所有节点的入度
-    in_degrees = train_g.in_degrees()  # 返回一个包含所有节点入度的张量
-    # 统计入度为 0 的节点个数
-    zero_in_degree_count = (in_degrees == 0).sum().item()
-    print(f"Number of nodes with zero in-degree: {zero_in_degree_count}")
-    train_g = dgl.add_self_loop(train_g) # 添加自环
-    # for i in range(3):
-    #     print(f"节点 {i} 的属性: {train_g.ndata['attr'][i]}")
+    whole_g = []
+    for i in range(len(g_nodes_list)):
+        g = nx.DiGraph()
+        g_nodes = g_nodes_list[i]
+        g_edges = g_edges_list[i]
+        for node in g_nodes:
+            g.add_node(node[0],attr=node[1]["attr"].float())
+        for edge in g_edges:
+            g.add_edge(edge[0], edge[1])
+        train_g = dgl.from_networkx(g,node_attrs=['attr'])
+        # 获取所有节点的入度
+        in_degrees = train_g.in_degrees()  # 返回一个包含所有节点入度的张量
+        # 统计入度为 0 的节点个数
+        zero_in_degree_count = (in_degrees == 0).sum().item()
+        print(f"Number of nodes with zero in-degree: {zero_in_degree_count}")
+        train_g = dgl.add_self_loop(train_g) # 添加自环？
+        whole_g.append(train_g)
     end_time = time.time()  # 记录结束时间
     print(f"Time taken to load and process dataset: {end_time - start_time:.4f} seconds")  # 输出运行时间
-    return train_g
+    return whole_g

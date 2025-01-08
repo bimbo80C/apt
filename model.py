@@ -3,6 +3,50 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl
 from dgl.nn.pytorch import GraphConv
+from dgl.nn.pytorch import SAGEConv, GATConv
+# class GCN(nn.Module):
+#     def __init__(self,
+#                  n_dim,
+#                  e_dim,
+#                  hidden_dim,
+#                  out_dim,
+#                  n_layers,
+#                  n_heads,
+#                  n_heads_out,
+#                  activation,
+#                  feat_drop,
+#                  attn_drop,
+#                  negative_slope,
+#                  residual,
+#                  norm,
+#                  concat_out=False,
+#                  encoding=False):
+class GCNConv(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, n_layers=2, activation=nn.ReLU(), dropout=0.0):
+        super(GCNConv, self).__init__()
+        self.layers = nn.ModuleList()
+        self.activation = activation
+        self.dropout = nn.Dropout(dropout)
+
+        # First layer
+        self.layers.append(GCNConv(in_dim, hidden_dim))
+
+        # Hidden layers
+        for _ in range(n_layers - 2):
+            self.layers.append(GCNConv(hidden_dim, hidden_dim))
+
+        # Output layer
+        self.layers.append(GCNConv(hidden_dim, out_dim))
+
+    def forward(self, x, edge_index):
+        for conv in self.layers[:-1]:
+            x = conv(x, edge_index)
+            x = self.activation(x)
+            x = self.dropout(x)
+
+        # Final layer without activation for output
+        x = self.layers[-1](x, edge_index)
+        return x
 
 class GCNModel(nn.Module):
     # init is ok
@@ -35,7 +79,7 @@ class GCNModel(nn.Module):
         x_original = g.ndata['attr'][mask_nodes].float()  # 保持输入一致
         x_reconstructed = recon_features[mask_nodes]
         feature_loss = F.mse_loss(x_reconstructed, x_original)
-        print(feature_loss)
+        # print(feature_loss)
         return feature_loss
 
     def mask_nodes(self, g, mask_rate):

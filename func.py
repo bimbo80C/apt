@@ -22,7 +22,7 @@ metadata = {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
                   'ta1-trace-e3-official-1.json.3'],
         'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-                 'ta1-trace-e3-official-1.json.3'] # 'ta1-trace-e3-official-1.json.4'
+                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4'] # 'ta1-trace-e3-official-1.json.4'
     },
     'theia': {
         'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
@@ -93,26 +93,21 @@ name_map = {
     "UnnamedPipeObject": "unnamed"
 }
 
-
-# TODO 将写死train的地方修改为format test
-###############
-# 提取每个属性到TXT，生成id_entity_map.json即uuid和类型的映射
-###############
-def preprocess(dataset, mode):
+# 先将所有实体和属性提取出来，数据集的分割按照event来
+def preprocess_entity_attr(dataset):
     id_entity_map = {}
-    for file in os.listdir(
-            './dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
-        if file in metadata[dataset][mode]:
+    for file in os.listdir('./dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
+        if 'json' in file and '5' not in file and '6' not in file and 'id' not in file:
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
-            fw_src = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_src.txt', 'a', encoding='utf-8')
-            fw_principal = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_principal.txt', 'a', encoding='utf-8')
-            fw_subject = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_subject.txt', 'a', encoding='utf-8')
-            fw_file = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_file.txt', 'a', encoding='utf-8')
-            fw_netflow = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_netflow.txt', 'a', encoding='utf-8')
-            fw_memory = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_memory.txt', 'a', encoding='utf-8')
-            fw_unnamed = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_unnamed.txt', 'a', encoding='utf-8')
-            fw_event = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_event.txt', 'a', encoding='utf-8')
+            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
+            fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
+            fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
+            fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
+            fw_netflow = open('./dataset/{}/'.format(dataset) + 'attr_netflow.txt', 'a', encoding='utf-8')
+            fw_memory = open('./dataset/{}/'.format(dataset) + 'attr_memory.txt', 'a', encoding='utf-8')
+            fw_unnamed = open('./dataset/{}/'.format(dataset) + 'attr_unnamed.txt', 'a', encoding='utf-8')
+            fw_event = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'a', encoding='utf-8')
             for line in tqdm(f):
                 # 这几种不需要关注 few information
                 if 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
@@ -224,17 +219,11 @@ def preprocess(dataset, mode):
                         pid) + '\t' + str(source_file_descriptor) + '\t' + str(sink_file_descriptor) + '\n'
                     fw_unnamed.write(attr_unnamed)
                 if record == 'Event':
-                    event_type = seq = thread_id = src = size = dst1 = dst2 = time = 'null'
+                    event_type =  src = dst1 = dst2 = time = 'null'
                     if len(pattern_type.findall(line)) > 0:
                         event_type = pattern_type.findall(line)[0]
-                    if len(pattern_seq.findall(line)) > 0:
-                        seq = pattern_seq.findall(line)[0]
-                    if len(pattern_thread_id.findall(line)) > 0:
-                        thread_id = pattern_thread_id.findall(line)[0]
                     if len(pattern_src.findall(line)) > 0:
                         src = pattern_src.findall(line)[0]
-                    if len(pattern_size.findall(line)) > 0:
-                        size = pattern_size.findall(line)[0]
                     if len(pattern_dst1.findall(line)) > 0:
                         dst1 = pattern_dst1.findall(line)[0]
                     if len(pattern_dst2.findall(line)) > 0:
@@ -242,9 +231,8 @@ def preprocess(dataset, mode):
                     if len(pattern_time.findall(line)) > 0:
                         time = pattern_time.findall(line)[0]
                     # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
-                        seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
-                        dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
+                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type)  + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+                        dst2) + '\t' + str(time) + '\n'
                     fw_event.write(attr_event)
             fw_src.close()
             fw_principal.close()
@@ -256,112 +244,272 @@ def preprocess(dataset, mode):
             fw_event.close()
             # 从每一个文件当中提取字段
     if len(id_entity_map) != 0:
-        fw_id_entity_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'id_entity_map.json', 'w', encoding='utf-8')
+        fw_id_entity_map = open('./dataset/{}/'.format(dataset) + 'id_entity_map.json', 'w', encoding='utf-8')
         json.dump(id_entity_map, fw_id_entity_map)
         fw_id_entity_map.close()
 
+###############
+# 提取训练集和测试集的事件
+###############
+# def preprocess(dataset, mode):
+#     for file in os.listdir('./dataset/{}/'.format(dataset)):
+#         if file in metadata[dataset][mode]:
+#             print('reading event{} ...'.format(file))
+#             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
+#             fw_event = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_event.txt', 'a', encoding='utf-8')
+#             for line in tqdm(f):
+#                 uuid = pattern_uuid.findall(line)[0]
+#                 record = pattern_record.findall(line)[0]
+#                 if record == 'Event':
+#                     event_type = seq = thread_id = src = size = dst1 = dst2 = time = 'null'
+#                     if len(pattern_type.findall(line)) > 0:
+#                         event_type = pattern_type.findall(line)[0]
+#                     if len(pattern_seq.findall(line)) > 0:
+#                         seq = pattern_seq.findall(line)[0]
+#                     if len(pattern_thread_id.findall(line)) > 0:
+#                         thread_id = pattern_thread_id.findall(line)[0]
+#                     if len(pattern_src.findall(line)) > 0:
+#                         src = pattern_src.findall(line)[0]
+#                     if len(pattern_size.findall(line)) > 0:
+#                         size = pattern_size.findall(line)[0]
+#                     if len(pattern_dst1.findall(line)) > 0:
+#                         dst1 = pattern_dst1.findall(line)[0]
+#                     if len(pattern_dst2.findall(line)) > 0:
+#                         dst2 = pattern_dst2.findall(line)[0]
+#                     if len(pattern_time.findall(line)) > 0:
+#                         time = pattern_time.findall(line)[0]
+#                     # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+#                     attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+#                         seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+#                         dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
+#                     fw_event.write(attr_event)
+#             fw_event.close()
+
+def preprocess(dataset):
+    for mode in metadata[dataset]:
+        for file in metadata[dataset][mode]:
+            if os.path.exists('./dataset/{}/'.format(dataset) + file + '.txt'):
+                continue
+            f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
+            fw_event = open('./dataset/{}/'.format(dataset) + file + '.txt', 'a', encoding='utf-8')
+            print('processing {} ...'.format(file))
+            for line in tqdm(f):
+                if 'com.bbn.tc.schema.avro.cdm18.Event' in line:
+                    uuid = pattern_uuid.findall(line)[0]
+                    record = pattern_record.findall(line)[0]
+                    if record == 'Event':
+                        # event_type = seq = thread_id = src = size = dst1 = dst2 = time = 'null'
+                        event_type = src = dst1 = dst2 = time = 'null'
+                        if len(pattern_type.findall(line)) > 0:
+                            event_type = pattern_type.findall(line)[0]
+                        # if len(pattern_seq.findall(line)) > 0:
+                        #     seq = pattern_seq.findall(line)[0]
+                        # if len(pattern_thread_id.findall(line)) > 0:
+                        #     thread_id = pattern_thread_id.findall(line)[0]
+                        if len(pattern_src.findall(line)) > 0:
+                            src = pattern_src.findall(line)[0]
+                        # if len(pattern_size.findall(line)) > 0:
+                        #     size = pattern_size.findall(line)[0]
+                        if len(pattern_dst1.findall(line)) > 0:
+                            dst1 = pattern_dst1.findall(line)[0]
+                        if len(pattern_dst2.findall(line)) > 0:
+                            dst2 = pattern_dst2.findall(line)[0]
+                        if len(pattern_time.findall(line)) > 0:
+                            time = pattern_time.findall(line)[0]
+                        # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                        # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                        #     seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+                        #     dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
+                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+                            dst2) + '\t' + str(time) + '\n'
+                        fw_event.write(attr_event)
+            fw_event.close()
+#看恶意节点种类的
+def malicious_type(dataset):
+    malicious_entities = './groundtruth/{}.txt'.format(dataset)
+    f = open(malicious_entities, 'r')
+    malicious_entities = {}
+    id_entity_map={}
+    fw_malicious_type = open('./dataset/{}/'.format(dataset) + 'malicious_type.txt', 'a', encoding='utf-8')
+    for l in f.readlines():
+        entity = l.strip()
+        if entity in malicious_entities:
+            malicious_entities[entity] += 1  # 如果实体已存在，计数加1
+        else:
+            malicious_entities[entity] = 1  # 如果实体不存在，初始化为1
+    # fw_malicious_type.write(malicious_entities)
+    fw_malicious_entities = open('./dataset/{}/'.format(dataset) + 'malicious_entities.json', 'w', encoding='utf-8')
+    json.dump(malicious_entities, fw_malicious_entities)
+    fw_malicious_entities.close()
+    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
+        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
+            id_entity_map = json.load(f_id_entity_map)
+    for i in malicious_entities:
+        if malicious_entities[i]>1:
+            print(i)
+        type = id_entity_map[i]
+        fw_malicious_type.write("{}\t{}\n".format(i,type))
+    fw_malicious_type.close()
 
 # 找出所有的节点对
-
-def find_entity_pair(dataset, mode):
+def find_entity_pair(dataset):
     record_cnt_map = {}  # 记录event,src和dst这些的数字编号(uuid,cnt)
-    entity_pairs = []
     entity_cnt = 0
-    src_dst_deduplication = set()
+    src_dst_deduplication_test = set()
+    src_dst_deduplication_train = set()
     malicious_entities = './groundtruth/{}.txt'.format(dataset)
     f = open(malicious_entities, 'r')
     malicious_entities = set()
     for l in f.readlines():
         malicious_entities.add(l.lstrip().rstrip())
-    if os.path.exists('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode)):
-        with open('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode), 'r', encoding='utf-8') as f_id_entity_map:
+    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
+        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
-    for file in os.listdir('./dataset/{}/{}/'.format(dataset, mode)):
-        if 'event' in file:  # attr_event.txt
-            # fw_entity_pair = open('./dataset/{}/{}/'.format(dataset,mode) + 'entity_pair.txt', 'w', encoding='utf-8')
-            print('searching behavior entity pair {} ...'.format(file))
-            f = open('./dataset/{}/{}/'.format(dataset, mode) + 'attr_event.txt', 'r', encoding='utf-8')
-            for l in f.readlines():
-                split_line = l.split('\t')
-                uuid, record, event_type, seq, thread_id, src, dst1, dst2, size, time = split_line
-                # 训练的时候只用正常的数据进行训练
-                if mode == 'train':
-                    if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
-                        continue
-                    if dst1 in malicious_entities and id_entity_map[src] != 'MemoryObject':
-                        continue
-                    if dst2 in malicious_entities and id_entity_map[src] != 'MemoryObject':
-                        continue
-                attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
-                # 考虑加入unnamed
-                if src in id_entity_map and dst1 in id_entity_map:
-                    if id_entity_map[src] not in attr_dict or id_entity_map[dst1] not in attr_dict:
-                        continue
-                if uuid not in record_cnt_map:
-                    record_cnt_map[uuid] = entity_cnt
+    for file in metadata[dataset]['train']:
+        entity_pairs = []
+        path = './dataset/{}/'.format(dataset) + file + '.txt'
+        f = open(path, 'r', encoding='utf-8')
+        for l in f.readlines():
+            split_line = l.split('\t')
+            uuid, record, event_type,src, dst1, dst2,time = split_line
+            # 训练的时候只用正常的数据进行训练,排除掉
+            if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                continue
+            if dst1 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                continue
+            if dst2 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+                continue
+            attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+            # 考虑加入unnamed
+            if src in id_entity_map and dst1 in id_entity_map:
+                if id_entity_map[src] not in attr_dict or id_entity_map[dst1] not in attr_dict:
+                    continue
+            if uuid not in record_cnt_map:
+                record_cnt_map[uuid] = entity_cnt
+                entity_cnt += 1
+            if src in id_entity_map and dst1 in id_entity_map:
+                if src not in record_cnt_map:
+                    record_cnt_map[src] = entity_cnt
                     entity_cnt += 1
-                if src in id_entity_map and dst1 in id_entity_map:
-                    if src not in record_cnt_map:
-                        record_cnt_map[src] = entity_cnt
-                        entity_cnt += 1
-                    if dst1 not in record_cnt_map:
-                        record_cnt_map[dst1] = entity_cnt
-                        entity_cnt += 1
-                    if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                        src_dst_pair = (dst1, src)
-                        if src_dst_pair not in src_dst_deduplication:
-                            src_dst_deduplication.add(src_dst_pair)
-                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                                record_cnt_map[dst1]) + '\t' + str(time)
-                            entity_pairs.append(entity_pair)
-                    else:
-                        src_dst_pair = (src, dst1)
-                        if src_dst_pair not in src_dst_deduplication:
-                            src_dst_deduplication.add(src_dst_pair)
-                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                                record_cnt_map[dst1]) + '\t' + str(time)
-                            entity_pairs.append(entity_pair)
-                if dst2 in id_entity_map:
-                    if id_entity_map[dst2] not in attr_dict:
-                        continue
-                    if dst2 not in record_cnt_map:
-                        record_cnt_map[dst2] = entity_cnt
-                        entity_cnt += 1
-                    if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                        src_dst_pair = (dst2, src)
-                        if src_dst_pair not in src_dst_deduplication:
-                            src_dst_deduplication.add(src_dst_pair)
-                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
-                                record_cnt_map[src]) + '\t' + str(time)
-                            entity_pairs.append(entity_pair)
-                    else:
-                        src_dst_pair = (src, dst2)
-                        if src_dst_pair not in src_dst_deduplication:
-                            src_dst_deduplication.add(src_dst_pair)
-                            entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                                record_cnt_map[dst2]) + '\t' + str(time)
-                            entity_pairs.append(entity_pair)
-            entity_pairs.sort(key=lambda l: l[4])
-            with open('./dataset/{}/{}/'.format(dataset, mode) + 'entity_pair.txt', "w") as fw_entity_pair:
-                for pair in entity_pairs:
-                    fw_entity_pair.write(f"{pair}")
-            fw_entity_pair.close()
-            # finish the entity_pair.txt
+                if dst1 not in record_cnt_map:
+                    record_cnt_map[dst1] = entity_cnt
+                    entity_cnt += 1
+                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                    src_dst_pair = (dst1, src)
+                    if src_dst_pair not in src_dst_deduplication_train:
+                        src_dst_deduplication_train.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+                else:
+                    src_dst_pair = (src, dst1)
+                    if src_dst_pair not in src_dst_deduplication_train:
+                        src_dst_deduplication_train.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+            if dst2 in id_entity_map:
+                if id_entity_map[dst2] not in attr_dict:
+                    continue
+                if dst2 not in record_cnt_map:
+                    record_cnt_map[dst2] = entity_cnt
+                    entity_cnt += 1
+                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                    src_dst_pair = (dst2, src)
+                    if src_dst_pair not in src_dst_deduplication_train:
+                        src_dst_deduplication_train.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+                else:
+                    src_dst_pair = (src, dst2)
+                    if src_dst_pair not in src_dst_deduplication_train:
+                        src_dst_deduplication_train.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst2]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+        entity_pairs.sort(key=lambda l: l[4])
+        with open('./dataset/{}/{}/'.format(dataset, 'train') + file+'.txt', "w") as fw_entity_pair:
+            for pair in entity_pairs:
+                fw_entity_pair.write(f"{pair}")
+        fw_entity_pair.close()
+        # finish the entity_pair.txt
+    for file in metadata[dataset]['test']:
+        entity_pairs = []
+        path = './dataset/{}/'.format(dataset) + file + '.txt'
+        f = open(path, 'r', encoding='utf-8')
+        for l in f.readlines():
+            split_line = l.split('\t')
+            uuid, record, event_type, src, dst1, dst2,time = split_line
+            attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
+            # 考虑加入unnamed
+            if src in id_entity_map and dst1 in id_entity_map:
+                if id_entity_map[src] not in attr_dict or id_entity_map[dst1] not in attr_dict:
+                    continue
+            if uuid not in record_cnt_map:
+                record_cnt_map[uuid] = entity_cnt
+                entity_cnt += 1
+            if src in id_entity_map and dst1 in id_entity_map:
+                if src not in record_cnt_map:
+                    record_cnt_map[src] = entity_cnt
+                    entity_cnt += 1
+                if dst1 not in record_cnt_map:
+                    record_cnt_map[dst1] = entity_cnt
+                    entity_cnt += 1
+                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                    src_dst_pair = (dst1, src)
+                    if src_dst_pair not in src_dst_deduplication_test:
+                        src_dst_deduplication_test.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+                else:
+                    src_dst_pair = (src, dst1)
+                    if src_dst_pair not in src_dst_deduplication_test:
+                        src_dst_deduplication_test.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+            if dst2 in id_entity_map:
+                if id_entity_map[dst2] not in attr_dict:
+                    continue
+                if dst2 not in record_cnt_map:
+                    record_cnt_map[dst2] = entity_cnt
+                    entity_cnt += 1
+                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                    src_dst_pair = (dst2, src)
+                    if src_dst_pair not in src_dst_deduplication_test:
+                        src_dst_deduplication_test.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+                else:
+                    src_dst_pair = (src, dst2)
+                    if src_dst_pair not in src_dst_deduplication_test:
+                        src_dst_deduplication_test.add(src_dst_pair)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                            record_cnt_map[dst2]) + '\t' + str(time)
+                        entity_pairs.append(entity_pair)
+        entity_pairs.sort(key=lambda l: l[4])
+        with open('./dataset/{}/{}/'.format(dataset, 'test') + file+'.txt', "w") as fw_entity_pair:
+            for pair in entity_pairs:
+                fw_entity_pair.write(f"{pair}")
+        fw_entity_pair.close()
+        # finish the entity_pair.txt
     if len(record_cnt_map) != 0:
-        fw_record_cnt_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'record_cnt_map.json', 'w',
+        fw_record_cnt_map = open('./dataset/{}/'.format(dataset) + 'record_cnt_map.json', 'w',
                                  encoding='utf-8')
         json.dump(record_cnt_map, fw_record_cnt_map)
         fw_record_cnt_map.close()
         # finish the record_map.txt
         cnt_record_map = {str(v): k for k, v in record_cnt_map.items()}
         # reverse
-        fw_cnt_record_map = open('./dataset/{}/{}/'.format(dataset, mode) + 'cnt_record_map.json', 'w',
+        fw_cnt_record_map = open('./dataset/{}/'.format(dataset) + 'cnt_record_map.json', 'w',
                                  encoding='utf-8')
         json.dump(cnt_record_map, fw_cnt_record_map)
         fw_cnt_record_map.close()
         # finish the count_record.txt
     return
-
 
 def ip_to_binary_list(ip):
     if pd.isna(ip):
@@ -371,7 +519,6 @@ def ip_to_binary_list(ip):
     binary_tensor = torch.tensor(binary_list, dtype=torch.int32)
     return binary_tensor
 
-
 def classify_port(port):
     if port < 1024:
         return 0  # 知名端口
@@ -379,7 +526,6 @@ def classify_port(port):
         return 1  # 注册端口
     else:
         return 2  # 动态端口
-
 
 # key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
 #                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
@@ -396,7 +542,6 @@ def one_hot_encode(df, column_name, max_dim=32):
         encoded = encoded[:, :max_dim]
     print(f"{column_name} is ready")
     return encoded
-
 
 def get_cnt(df, attr_type):
     if attr_type in ['remote_address', 'memory_address', 'local_address']:
@@ -421,7 +566,6 @@ def get_cnt(df, attr_type):
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
 
-
 def get_embedding(df, attr_type):
     if attr_type == 'cmdline':
         # 将cmdline和path转换为特征向量
@@ -444,8 +588,8 @@ def get_attrs(dataset, mode):
     # entity == subject
     uuid_to_node_attrs = {}
     uuid_to_edge_attrs = {}
-    if os.path.exists('./dataset/{}/{}/attr_subject.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/attr_subject.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_sub:
+    if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
+        with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_sub:
             df = pd.read_csv(f_sub,
                              sep='\t',
                              names=['uuid', 'record', 'subject_type', 'parent',
@@ -454,8 +598,8 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'subject_type')
             df = get_embedding(df, 'cmdline')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-    if os.path.exists('./dataset/{}/{}/attr_file.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/attr_file.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_file:
+    if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
+        with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
                              sep='\t',
                              names=['uuid', 'record', 'file_type', 'epoch',
@@ -463,8 +607,8 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'file_type')
             df = get_embedding(df, 'path')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-    if os.path.exists('./dataset/{}/{}/attr_netflow.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/attr_netflow.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_netflow:
+    if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
+        with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as f_netflow:
             df = pd.read_csv(f_netflow,
                              sep='\t',
                              names=['uuid', 'record', 'epoch',
@@ -479,8 +623,8 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'remote_port')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
-    if os.path.exists('./dataset/{}/{}/attr_memory.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/attr_memory.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_mem:
+    if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
+        with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem:
             df = pd.read_csv(f_mem,
                              sep='\t',
                              names=['uuid', 'record', 'epoch',
@@ -498,33 +642,30 @@ def get_attrs(dataset, mode):
     #                          )
     #         uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
-    if os.path.exists('./dataset/{}/{}/attr_event.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/attr_event.txt'.format(dataset, mode), 'r', encoding='utf-8') as f_event:
+    if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
+        with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
             df = pd.read_csv(f_event,
                              sep='\t',
-                             names=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'src', 'dst1', 'dst2', 'size',
-                                    'time'],
+                             names=['uuid', 'record', 'event_type', 'src', 'dst1', 'dst2','time'],
                              dtype={'size': 'float'},
-                             usecols=['uuid', 'record', 'event_type', 'seq', 'thread_id', 'size', 'time']
+                             usecols=['uuid', 'record', 'event_type','time']
                              )
             df = get_cnt(df, 'event_type')
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
-    with open('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode), 'wb') as f:
+    with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
 
-
-def get_maps(dataset, mode):
-    if os.path.exists('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode)):
-        with open('./dataset/{}/{}/id_entity_map.json'.format(dataset, mode), 'r', encoding='utf-8') as f_id_entity_map:
+def get_maps(dataset):
+    if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
+        with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             print('loading id_entity_map')
             id_entity_map = json.load(f_id_entity_map)
-    if os.path.exists('./dataset/{}/{}/cnt_record_map.json'.format(dataset, mode)):
-        with open('./dataset/{}/{}/cnt_record_map.json'.format(dataset, mode), 'r',
+    if os.path.exists('./dataset/{}/cnt_record_map.json'.format(dataset)):
+        with open('./dataset/{}/cnt_record_map.json'.format(dataset), 'r',
                   encoding='utf-8') as f_cnt_record_map:
             print('loading cnt_record_map')
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
-
 
 def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs):
     sub_g = nx.DiGraph()
@@ -606,16 +747,18 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
 
 def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode):
     cnt = 0
-    g_nodes_list = []
     malicious_cnt_list = []
+    g_nodes_list = []
     malicious_entities = './groundtruth/{}.txt'.format(dataset)
     f = open(malicious_entities, 'r')
     malicious_entities = set()
     for l in f.readlines():
         malicious_entities.add(l.lstrip().rstrip())
-    if os.path.exists('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode), 'r', encoding='utf-8') as f:
-            print('loading event_list for sub_g_construction')
+    for file in metadata[dataset][mode]:
+        path = './dataset/{}/{}/'.format(dataset,mode) + file + '.txt'
+        g_nodes = []
+        with open(path, 'r') as f:
+            print('loading event_list {} for sub_g_construction'.format(file))
             for line in tqdm(f):
                 event = line.strip().split('\t')
                 entity_pair = {
@@ -639,22 +782,23 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                 sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
                                                   uuid_to_edge_attrs)
                 sub_g_embedding = sub_g_embedding_aggregation(sub_g)
-                g_nodes_list.append((cnt, {"attr": sub_g_embedding}))
-                # sub_g_list.append(sub_g)
-                if cnt % 100000 == 0:
-                    print("{} sub_g is finished".format(cnt))
-            pkl.dump(malicious_cnt_list, open('./dataset/{}/test/malicious.pkl'.format(dataset), 'wb'))
+                g_nodes.append((cnt, {"attr": sub_g_embedding}))
+        g_nodes_list.append(g_nodes)
+    if mode == 'test':
+        pkl.dump(malicious_cnt_list, open('./dataset/{}/test/malicious.pkl'.format(dataset), 'wb'))
     return g_nodes_list
 
 
 # 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
 
 def graph_edge_construction(dataset, mode):
-    g_edges_set = set()
+    g_edges_list=[]
     cnt = 0
-    if os.path.exists('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode)):
-        with open('./dataset/{}/{}/entity_pair.txt'.format(dataset, mode), 'r', encoding='utf-8') as f:
-            print('processing g_edges_list')
+    print('processing g_edges_list')
+    for file in metadata[dataset][mode]:
+        path = './dataset/{}/{}/'.format(dataset, mode) + file + '.txt'
+        g_edges_set = set()
+        with open(path, 'r', encoding='utf-8') as f:
             map_a = defaultdict(list)
             map_b = defaultdict(list)
             for line in f:
@@ -683,8 +827,9 @@ def graph_edge_construction(dataset, mode):
                             for event_dst in sampled_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
-            with open('./dataset/{}/{}/g_edges_list.pkl'.format(dataset, mode), 'wb') as f:
-                pkl.dump(list(g_edges_set), f)
+            g_edges_list.append(list(g_edges_set))
+    with open('./dataset/{}/{}/g_edges_list.pkl'.format(dataset, mode), 'wb') as f:
+        pkl.dump(list(g_edges_list), f)
 
 
 # 对每个节点对进行处理，构建子图
@@ -692,12 +837,12 @@ def graph_node_construction(dataset, mode):
     uuid_to_node_attrs = {}
     uuid_to_edge_attrs = {}
     g_nodes_list = []
-    if os.path.exists('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode)):
-        with open('./dataset/{}/{}/uuid_to_attrs.pkl'.format(dataset, mode), 'rb') as f:
+    if os.path.exists('./dataset/{}/uuid_to_attrs.pkl'.format(dataset)):
+        with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'rb') as f:
             uuid_to_node_attrs, uuid_to_edge_attrs = pkl.load(f)
     else:
         raise NotImplementedError("There is not pkl file")
-    id_entity_map, cnt_record_map = get_maps(dataset, mode)
+    id_entity_map, cnt_record_map = get_maps(dataset)
     g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
                                                 cnt_record_map, mode)
     print("g_nodes_list is ready")
@@ -707,16 +852,17 @@ def graph_node_construction(dataset, mode):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="test")
+    parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
     mode = args.mode
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
-
-    # preprocess(dataset,mode) # 这里mode划分数据集
-    # find_entity_pair(dataset,mode) # 这里mode决定数据集中是否包含恶意节点
+    # preprocess_entity_attr(dataset)
+    #malicious_type(dataset)
+    # preprocess(dataset) # 这里mode划分数据集
+    # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    graph_node_construction(dataset, mode)
+    # graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
 
