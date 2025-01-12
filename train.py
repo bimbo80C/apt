@@ -4,7 +4,7 @@ from torch.optim import Adam
 import argparse
 import torch
 from tqdm import tqdm
-
+import os
 
 
 import pickle as pkl
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     lr = args.lr
     max_epoch = 50
 
-    whole_g = load_darpa_dataset(dataset,mode='train')
+    whole_g = load_darpa_dataset(dataset,mode='test')
     # features = train_g.ndata['attr']
     # in_dim = features.shape[1]  # in_dim = 128
     in_dim = 128
@@ -45,4 +45,5 @@ if __name__ == '__main__':
             del g
         epoch_iter.set_description(f"Epoch {epoch} | train_loss: {epoch_loss:.4f}")
     torch.save(model.state_dict(), "./checkpoints/checkpoint-{}.pt".format(dataset))
-
+    save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
+    os.unlink(save_dict_path)

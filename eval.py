@@ -61,11 +61,20 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     del distances
     auc = roc_auc_score(y_test, score)  # 计算AUC分数
     prec, rec, threshold = precision_recall_curve(y_test, score)
+    # 假设 prec 是一个 numpy 数组
+    with open('outputrec.txt', 'w') as f_rec:
+        for p in rec:
+            f_rec.write(f'{p}\n')
+
+    with open('outputprec.txt', 'w') as f_prec:
+        for p in prec:
+            f_prec.write(f'{p}\n')
+
     f1 = 2 * prec * rec / (rec + prec + 1e-9)
     best_idx = -1
     for i in range(len(f1)):
         # To repeat peak performance
-        if dataset == 'trace' and rec[i] < 0.99979:
+        if dataset == 'trace' and rec[i] < 0.95:
             best_idx = i - 1
             break
         if dataset == 'theia' and rec[i] < 0.99996:
@@ -75,7 +84,8 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
             best_idx = i - 1
             break
     best_thres = threshold[best_idx]
-
+    # print('best_idx:{}'.format(best_idx))
+    # print(best_thres)
     tn = 0
     fn = 0
     tp = 0
@@ -100,25 +110,25 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     return auc, 0.0, None, None
 
 
-#多线程操作
-def embed_graph(model, g, device):
-    g = g.to(device)
-    embedded = model.embed(g).cpu().numpy()
-    del g  # Free memory after use
-    return embedded
-
-#Multithreaded embedding
-def multithreaded_embedding(whole_g, model, device, num_threads=4):
-    x_train = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = [executor.submit(embed_graph, model, g, device) for g in whole_g]
-
-        for future in concurrent.futures.as_completed(futures):
-            x_train.append(future.result())
-
-    return x_train
-#===========
+# #多线程操作
+# def embed_graph(model, g, device):
+#     g = g.to(device)
+#     embedded = model.embed(g).detach().cpu().numpy()
+#     del g  # Free memory after use
+#     return embedded
+#
+# #Multithreaded embedding
+# def multithreaded_embedding(whole_g, model, device, num_threads=4):
+#     x_train = []
+#
+#     with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+#         futures = [executor.submit(embed_graph, model, g, device) for g in whole_g]
+#
+#         for future in concurrent.futures.as_completed(futures):
+#             x_train.append(future.result())
+#
+#     return x_train
+# #===========
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
@@ -147,11 +157,11 @@ if __name__ == '__main__':
     with torch.no_grad():
         whole_g = load_darpa_dataset(dataset)
         x_train = []
-        # for i in range(len(whole_g)):
-        #     g= whole_g[i].to(device)
-        #     x_train.append(model.embed(g).cpu().numpy())
-        #     del g
-        x_train =multithreaded_embedding(whole_g, model, device, num_threads=4)
+        for i in range(len(whole_g)):
+            g= whole_g[i].to(device)
+            x_train.append(model.embed(g).cpu().numpy())
+            del g
+        # x_train =multithreaded_embedding(whole_g, model, device, num_threads=4)
         x_train = np.concatenate(x_train, axis=0)
         print('trained embed is loaded')
         skip_benign = 0

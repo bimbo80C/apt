@@ -22,7 +22,7 @@ metadata = {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
                   'ta1-trace-e3-official-1.json.3'],
         'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4'] # 'ta1-trace-e3-official-1.json.4'
+                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']  # 'ta1-trace-e3-official-1.json.4'
     },
     'theia': {
         'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
@@ -93,10 +93,12 @@ name_map = {
     "UnnamedPipeObject": "unnamed"
 }
 
+
 # 先将所有实体和属性提取出来，数据集的分割按照event来
 def preprocess_entity_attr(dataset):
     id_entity_map = {}
-    for file in os.listdir('./dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
+    for file in os.listdir(
+            './dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
         if 'json' in file and '5' not in file and '6' not in file and 'id' not in file:
             print('reading {} ...'.format(file))
             f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
@@ -219,7 +221,7 @@ def preprocess_entity_attr(dataset):
                         pid) + '\t' + str(source_file_descriptor) + '\t' + str(sink_file_descriptor) + '\n'
                     fw_unnamed.write(attr_unnamed)
                 if record == 'Event':
-                    event_type =  src = dst1 = dst2 = time = 'null'
+                    event_type = src = dst1 = dst2 = time = 'null'
                     if len(pattern_type.findall(line)) > 0:
                         event_type = pattern_type.findall(line)[0]
                     if len(pattern_src.findall(line)) > 0:
@@ -231,7 +233,8 @@ def preprocess_entity_attr(dataset):
                     if len(pattern_time.findall(line)) > 0:
                         time = pattern_time.findall(line)[0]
                     # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type)  + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(
+                        dst1) + '\t' + str(
                         dst2) + '\t' + str(time) + '\n'
                     fw_event.write(attr_event)
             fw_src.close()
@@ -247,6 +250,7 @@ def preprocess_entity_attr(dataset):
         fw_id_entity_map = open('./dataset/{}/'.format(dataset) + 'id_entity_map.json', 'w', encoding='utf-8')
         json.dump(id_entity_map, fw_id_entity_map)
         fw_id_entity_map.close()
+
 
 ###############
 # 提取训练集和测试集的事件
@@ -320,16 +324,19 @@ def preprocess(dataset):
                         # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
                         #     seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
                         #     dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
-                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
+                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                            src) + '\t' + str(dst1) + '\t' + str(
                             dst2) + '\t' + str(time) + '\n'
                         fw_event.write(attr_event)
             fw_event.close()
-#看恶意节点种类的
+
+
+# 看恶意节点种类的
 def malicious_type(dataset):
     malicious_entities = './groundtruth/{}.txt'.format(dataset)
     f = open(malicious_entities, 'r')
     malicious_entities = {}
-    id_entity_map={}
+    id_entity_map = {}
     fw_malicious_type = open('./dataset/{}/'.format(dataset) + 'malicious_type.txt', 'a', encoding='utf-8')
     for l in f.readlines():
         entity = l.strip()
@@ -345,11 +352,12 @@ def malicious_type(dataset):
         with open('./dataset/{}/id_entity_map.json'.format(dataset), 'r', encoding='utf-8') as f_id_entity_map:
             id_entity_map = json.load(f_id_entity_map)
     for i in malicious_entities:
-        if malicious_entities[i]>1:
+        if malicious_entities[i] > 1:
             print(i)
         type = id_entity_map[i]
-        fw_malicious_type.write("{}\t{}\n".format(i,type))
+        fw_malicious_type.write("{}\t{}\n".format(i, type))
     fw_malicious_type.close()
+
 
 # 找出所有的节点对
 def find_entity_pair(dataset):
@@ -371,7 +379,7 @@ def find_entity_pair(dataset):
         f = open(path, 'r', encoding='utf-8')
         for l in f.readlines():
             split_line = l.split('\t')
-            uuid, record, event_type,src, dst1, dst2,time = split_line
+            uuid, record, event_type, src, dst1, dst2, time = split_line
             # 训练的时候只用正常的数据进行训练,排除掉
             if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
                 continue
@@ -429,7 +437,7 @@ def find_entity_pair(dataset):
                             record_cnt_map[dst2]) + '\t' + str(time)
                         entity_pairs.append(entity_pair)
         entity_pairs.sort(key=lambda l: l[4])
-        with open('./dataset/{}/{}/'.format(dataset, 'train') + file+'.txt', "w") as fw_entity_pair:
+        with open('./dataset/{}/{}/'.format(dataset, 'train') + file + '.txt', "w") as fw_entity_pair:
             for pair in entity_pairs:
                 fw_entity_pair.write(f"{pair}")
         fw_entity_pair.close()
@@ -440,7 +448,7 @@ def find_entity_pair(dataset):
         f = open(path, 'r', encoding='utf-8')
         for l in f.readlines():
             split_line = l.split('\t')
-            uuid, record, event_type, src, dst1, dst2,time = split_line
+            uuid, record, event_type, src, dst1, dst2, time = split_line
             attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
             # 考虑加入unnamed
             if src in id_entity_map and dst1 in id_entity_map:
@@ -491,7 +499,7 @@ def find_entity_pair(dataset):
                             record_cnt_map[dst2]) + '\t' + str(time)
                         entity_pairs.append(entity_pair)
         entity_pairs.sort(key=lambda l: l[4])
-        with open('./dataset/{}/{}/'.format(dataset, 'test') + file+'.txt', "w") as fw_entity_pair:
+        with open('./dataset/{}/{}/'.format(dataset, 'test') + file + '.txt', "w") as fw_entity_pair:
             for pair in entity_pairs:
                 fw_entity_pair.write(f"{pair}")
         fw_entity_pair.close()
@@ -511,6 +519,7 @@ def find_entity_pair(dataset):
         # finish the count_record.txt
     return
 
+
 def ip_to_binary_list(ip):
     if pd.isna(ip):
         return torch.zeros(128, dtype=torch.int32)
@@ -519,6 +528,7 @@ def ip_to_binary_list(ip):
     binary_tensor = torch.tensor(binary_list, dtype=torch.int32)
     return binary_tensor
 
+
 def classify_port(port):
     if port < 1024:
         return 0  # 知名端口
@@ -526,6 +536,7 @@ def classify_port(port):
         return 1  # 注册端口
     else:
         return 2  # 动态端口
+
 
 # key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
 #                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
@@ -542,6 +553,7 @@ def one_hot_encode(df, column_name, max_dim=32):
         encoded = encoded[:, :max_dim]
     print(f"{column_name} is ready")
     return encoded
+
 
 def get_cnt(df, attr_type):
     if attr_type in ['remote_address', 'memory_address', 'local_address']:
@@ -565,6 +577,7 @@ def get_cnt(df, attr_type):
         return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
+
 
 def get_embedding(df, attr_type):
     if attr_type == 'cmdline':
@@ -646,14 +659,15 @@ def get_attrs(dataset, mode):
         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
             df = pd.read_csv(f_event,
                              sep='\t',
-                             names=['uuid', 'record', 'event_type', 'src', 'dst1', 'dst2','time'],
+                             names=['uuid', 'record', 'event_type', 'src', 'dst1', 'dst2', 'time'],
                              dtype={'size': 'float'},
-                             usecols=['uuid', 'record', 'event_type','time']
+                             usecols=['uuid', 'record', 'event_type', 'time']
                              )
             df = get_cnt(df, 'event_type')
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
     with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
+
 
 def get_maps(dataset):
     if os.path.exists('./dataset/{}/id_entity_map.json'.format(dataset)):
@@ -667,13 +681,14 @@ def get_maps(dataset):
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
 
+
 def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs):
     sub_g = nx.DiGraph()
-    # key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
-    #                  'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    # detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
-    key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type']
+    key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
+                     'event_type']  # 对应subject,file,netflow,memory,event核心信息
+    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    # key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
+    # detail_attr_dict = ['cmdline', 'file_type']
     # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
     #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、remote_port、ip_protocol
     cnt_node = 0
@@ -752,10 +767,11 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
     malicious_entities = './groundtruth/{}.txt'.format(dataset)
     f = open(malicious_entities, 'r')
     malicious_entities = set()
+    file_cnt = 0
     for l in f.readlines():
         malicious_entities.add(l.lstrip().rstrip())
     for file in metadata[dataset][mode]:
-        path = './dataset/{}/{}/'.format(dataset,mode) + file + '.txt'
+        path = './dataset/{}/{}/'.format(dataset, mode) + file + '.txt'
         g_nodes = []
         with open(path, 'r') as f:
             print('loading event_list {} for sub_g_construction'.format(file))
@@ -783,16 +799,19 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                                                   uuid_to_edge_attrs)
                 sub_g_embedding = sub_g_embedding_aggregation(sub_g)
                 g_nodes.append((cnt, {"attr": sub_g_embedding}))
-        g_nodes_list.append(g_nodes)
+        # g_nodes_list.append(g_nodes)
+        with open('./dataset/{}/{}/g_nodes_list_{}.pkl'.format(dataset, mode, file_cnt), 'wb') as f:
+            pkl.dump(g_nodes, f)
+            file_cnt += 1
     if mode == 'test':
         pkl.dump(malicious_cnt_list, open('./dataset/{}/test/malicious.pkl'.format(dataset), 'wb'))
-    return g_nodes_list
-
+    # return g_nodes_list
+    return
 
 # 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
 
 def graph_edge_construction(dataset, mode):
-    g_edges_list=[]
+    g_edges_list = []
     cnt = 0
     print('processing g_edges_list')
     for file in metadata[dataset][mode]:
@@ -843,25 +862,25 @@ def graph_node_construction(dataset, mode):
     else:
         raise NotImplementedError("There is not pkl file")
     id_entity_map, cnt_record_map = get_maps(dataset)
-    g_nodes_list = sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,
-                                                cnt_record_map, mode)
+    sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,cnt_record_map, mode)
     print("g_nodes_list is ready")
-    with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset, mode), 'wb') as f:
-        pkl.dump(g_nodes_list, f)
+    # with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset, mode), 'wb') as f:
+    #     pkl.dump(g_nodes_list, f)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="train")
+    parser.add_argument("--mode", type=str, default="test")
     args = parser.parse_args()
     dataset = args.dataset
     mode = args.mode
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
     # preprocess_entity_attr(dataset)
-    #malicious_type(dataset)
+    # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    # graph_node_construction(dataset, mode)
+    graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
