@@ -43,7 +43,7 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         print("begin knn model training")
         # tree = KDTree(x_train)
         # distances, _ = tree.query(x_train[idx][:min(50000, x_train.shape[0])], k=n_neighbors)
-        distances, _ = nbrs.kneighbors(x_train[idx][:min(500, x_train.shape[0])], n_neighbors=n_neighbors)
+        distances, _ = nbrs.kneighbors(x_train[idx][:min(1000, x_train.shape[0])], n_neighbors=n_neighbors)
         del x_train
         mean_distance = distances.mean()
         del distances
@@ -74,7 +74,7 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     best_idx = -1
     for i in range(len(f1)):
         # To repeat peak performance
-        if dataset == 'trace' and rec[i] < 0.95:
+        if dataset == 'trace' and rec[i] < 0.99:
             best_idx = i - 1
             break
         if dataset == 'theia' and rec[i] < 0.99996:
@@ -153,6 +153,7 @@ if __name__ == '__main__':
     if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
         with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
             malicious_list = pkl.load(f)
+    # print(malicious_list)
     # 准备好knn的输入
     with torch.no_grad():
         whole_g = load_darpa_dataset(dataset)

@@ -11,7 +11,7 @@ import pickle as pkl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="trains")
+    parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
     args = parser.parse_args()
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     lr = args.lr
     max_epoch = 50
 
-    whole_g = load_darpa_dataset(dataset,mode='test')
+    whole_g = load_darpa_dataset(dataset,mode='train')
     # features = train_g.ndata['attr']
     # in_dim = features.shape[1]  # in_dim = 128
     in_dim = 128

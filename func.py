@@ -793,7 +793,7 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                 #     if src_uuid in malicious_entities or dst_uuid in malicious_entities:
                 #         malicious_cnt_list.append(cnt)
                 if mode == 'test':
-                    if src_uuid in malicious_entities and src_uuid:
+                    if src_uuid in malicious_entities :
                         malicious_cnt_list.append(cnt)
                 sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
                                                   uuid_to_edge_attrs)
