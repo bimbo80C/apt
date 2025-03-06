@@ -185,33 +185,33 @@ if __name__ == '__main__':
         print('embed for test is loaded')
 
 
-        tsne = TSNE(n_components=2, random_state=42)
-        # 合并训练集和测试集以确保降维时不会出现信息丢失
-
-        num_samples = 30000  # 例如选择 30 万条数据
-        # 从训练集和测试集分别采样 30 万条
-        indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
-        indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
-        x_train_sampled = x_train[indices_train]
-        x_test_sampled = x_test[indices_test]
-        # 使用 t-SNE 对训练集和测试集的特征进行降维
-        x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
-        x_all_embedded = tsne.fit_transform(x_all_sampled)
-        # 将降维后的结果分开成训练集和测试集
-        x_train_embedded = x_all_embedded[:num_samples]
-        x_test_embedded = x_all_embedded[num_samples:]
-        # 绘制 2D 散点图
-        plt.figure(figsize=(8, 6))
-        # 绘制训练集的散点图，使用不同颜色表示不同数据
-        plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
-        # 绘制测试集的散点图
-        plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
-        # 设置图例
-        plt.legend()
-        # 设置标题
-        plt.title("t-SNE Visualization of Train and Test Embeddings")
-        # 显示图形
-        plt.show()
+        # tsne = TSNE(n_components=2, random_state=42)
+        # # 合并训练集和测试集以确保降维时不会出现信息丢失
+        #
+        # num_samples = 30000  # 例如选择 30 万条数据
+        # # 从训练集和测试集分别采样 30 万条
+        # indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
+        # indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
+        # x_train_sampled = x_train[indices_train]
+        # x_test_sampled = x_test[indices_test]
+        # # 使用 t-SNE 对训练集和测试集的特征进行降维
+        # x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
+        # x_all_embedded = tsne.fit_transform(x_all_sampled)
+        # # 将降维后的结果分开成训练集和测试集
+        # x_train_embedded = x_all_embedded[:num_samples]
+        # x_test_embedded = x_all_embedded[num_samples:]
+        # # 绘制 2D 散点图
+        # plt.figure(figsize=(8, 6))
+        # # 绘制训练集的散点图，使用不同颜色表示不同数据
+        # plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+        # # 绘制测试集的散点图
+        # plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+        # # 设置图例
+        # plt.legend()
+        # # 设置标题
+        # plt.title("t-SNE Visualization of Train and Test Embeddings")
+        # # 显示图形
+        # plt.show()
         n = x_test.shape[0]  # 测试集样本数量
         y_test = np.zeros(n)  # 测试集标签
         y_test[malicious_list] = 1.0
