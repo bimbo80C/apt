@@ -29,13 +29,14 @@ def load_darpa_dataset(dataset,feature_dim=128,mode='train'):
                 for edge in g_edges:
                     g.add_edge(edge[0], edge[1])
                 train_g = dgl.from_networkx(g, node_attrs=['attr'])
-                # 获取所有节点的入度
-                in_degrees = train_g.in_degrees()  # 返回一个包含所有节点入度的张量
-                # 统计入度为 0 的节点个数
-                zero_in_degree_count = (in_degrees == 0).sum().item()
-                print(f"Number of nodes: {g.number_of_nodes()}")
-                print(f"Number of nodes with zero in-degree: {zero_in_degree_count}")
+                # 获取所有节点的度
+                g_degree = train_g.in_degrees() + train_g.out_degrees()
+                # 统计度为 0 的节点个数
+                zero_degree_count = (g_degree == 0).sum().item()
+                print(f"Number of nodes: {train_g.number_of_nodes()}")
+                print(f"Number of nodes with zero degree: {zero_degree_count}")
                 train_g = dgl.add_self_loop(train_g)  # 添加自环？
+
                 whole_g.append(train_g)
     end_time = time.time()  # 记录结束时间
     print(f"Time taken to load and process dataset: {end_time - start_time:.4f} seconds")  # 输出运行时间

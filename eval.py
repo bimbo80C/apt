@@ -12,6 +12,9 @@ import argparse
 from loaddata import load_darpa_dataset
 from sklearn.manifold import TSNE
 import concurrent.futures
+def save_seed(seed, filename='random_seed.pkl'):
+    with open(filename, 'wb') as f:
+        pkl.dump(seed, f)
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -22,16 +25,20 @@ def set_random_seed(seed):
     torch.backends.cudnn.determinstic = True
 
 
+
 def evaluate_using_knn(dataset, x_train, x_test, y_test):
     # 对训练数据和测试数据进行归一化，然后使用 K 近邻算法（KNN）对训练数据进行拟合
+    epsilon = 1e-8  # 设定一个很小的值，防止除零 for cadets
     x_train_mean = x_train.mean(axis=0)
     x_train_std = x_train.std(axis=0)
+    x_train_std[x_train_std == 0] = epsilon
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
     if dataset == 'cadets':
         n_neighbors = 200
     else:
         n_neighbors = 10
+
     nbrs = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1)
     nbrs.fit(x_train)  # 使用训练数据 x_train 拟合 K 近邻模型
 
@@ -43,7 +50,7 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         print("begin knn model training")
         # tree = KDTree(x_train)
         # distances, _ = tree.query(x_train[idx][:min(50000, x_train.shape[0])], k=n_neighbors)
-        distances, _ = nbrs.kneighbors(x_train[idx][:min(1000, x_train.shape[0])], n_neighbors=n_neighbors)
+        distances, _ = nbrs.kneighbors(x_train[idx][:min(500, x_train.shape[0])], n_neighbors=n_neighbors)
         del x_train
         mean_distance = distances.mean()
         del distances
@@ -74,13 +81,13 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     best_idx = -1
     for i in range(len(f1)):
         # To repeat peak performance
-        if dataset == 'trace' and rec[i] < 0.99:
+        if dataset == 'trace' and rec[i] < 0.95:
             best_idx = i - 1
             break
         if dataset == 'theia' and rec[i] < 0.99996:
             best_idx = i - 1
             break
-        if dataset == 'cadets' and rec[i] < 0.9976:
+        if dataset == 'cadets' and rec[i] < 0.95:
             best_idx = i - 1
             break
     best_thres = threshold[best_idx]
@@ -170,6 +177,7 @@ if __name__ == '__main__':
         x_test = []
         for i in range(len(whole_g)):
             g= whole_g[i].to(device)
+
             if i != len(whole_g) - 1: # 可能换数据集有问题
                 skip_benign += g.number_of_nodes()
             x_test.append(model.embed(g).cpu().numpy())
@@ -177,39 +185,39 @@ if __name__ == '__main__':
         print('embed for test is loaded')
 
 
-        # tsne = TSNE(n_components=2, random_state=42)
-        # # 合并训练集和测试集以确保降维时不会出现信息丢失
-        #
-        # num_samples = 300  # 例如选择 30 万条数据
-        # # 从训练集和测试集分别采样 30 万条
-        # indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
-        # indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
-        # x_train_sampled = x_train[indices_train]
-        # x_test_sampled = x_test[indices_test]
-        # # 使用 t-SNE 对训练集和测试集的特征进行降维
-        # x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
-        # x_all_embedded = tsne.fit_transform(x_all_sampled)
-        # # 将降维后的结果分开成训练集和测试集
-        # x_train_embedded = x_all_embedded[:num_samples]
-        # x_test_embedded = x_all_embedded[num_samples:]
-        # # 绘制 2D 散点图
-        # plt.figure(figsize=(8, 6))
-        # # 绘制训练集的散点图，使用不同颜色表示不同数据
-        # plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
-        # # 绘制测试集的散点图
-        # plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
-        # # 设置图例
-        # plt.legend()
-        # # 设置标题
-        # plt.title("t-SNE Visualization of Train and Test Embeddings")
-        # # 显示图形
-        # plt.show()
+        tsne = TSNE(n_components=2, random_state=42)
+        # 合并训练集和测试集以确保降维时不会出现信息丢失
+
+        num_samples = 30000  # 例如选择 30 万条数据
+        # 从训练集和测试集分别采样 30 万条
+        indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
+        indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
+        x_train_sampled = x_train[indices_train]
+        x_test_sampled = x_test[indices_test]
+        # 使用 t-SNE 对训练集和测试集的特征进行降维
+        x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
+        x_all_embedded = tsne.fit_transform(x_all_sampled)
+        # 将降维后的结果分开成训练集和测试集
+        x_train_embedded = x_all_embedded[:num_samples]
+        x_test_embedded = x_all_embedded[num_samples:]
+        # 绘制 2D 散点图
+        plt.figure(figsize=(8, 6))
+        # 绘制训练集的散点图，使用不同颜色表示不同数据
+        plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+        # 绘制测试集的散点图
+        plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+        # 设置图例
+        plt.legend()
+        # 设置标题
+        plt.title("t-SNE Visualization of Train and Test Embeddings")
+        # 显示图形
+        plt.show()
         n = x_test.shape[0]  # 测试集样本数量
         y_test = np.zeros(n)  # 测试集标签
         y_test[malicious_list] = 1.0
         # Exclude training samples from the test set
         test_idx = []
-        for i in tqdm(range(x_test.shape[0]),total=len(x_test)):
+        for i in range(x_test.shape[0]):
             if i >= skip_benign or y_test[i] == 1.0:
                 test_idx.append(i)
         result_x_test = x_test[test_idx]

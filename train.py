@@ -11,7 +11,7 @@ import pickle as pkl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="train")
+    # parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
     args = parser.parse_args()
