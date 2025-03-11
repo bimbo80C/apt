@@ -1,0 +1,23 @@
+SrcSinkObject
+uuid record epoch pid fileDescriptor
+==
+Principal
+uuid record principal_type user_id group_ids euid
+==
+Subject
+uuid record subject_type parent local_principal cid start_time unit_id cmdline
+==
+File
+uuid record file_type epoch permission path
+==
+Netflow
+uuid record epoch local_address local_port remote_address remote_port ip_protocol
+==
+Memory
+uuid record epoch memory_address tgid size
+==
+Unnamed
+uuid record epoch pid source_file_descriptor sink_file_descriptor
+==
+Event
+uuid record event_type seq thread_id src dst1 dst2 size time
