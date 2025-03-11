@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pickle as pkl
-
+import torch.nn as nn
 from sklearn.feature_extraction.text import TfidfVectorizer
 import torch
 import dgl
@@ -16,6 +16,7 @@ from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import random
+from collections import Counter
 
 metadata = {
     'trace': {
@@ -24,15 +25,18 @@ metadata = {
         'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
                  'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']  # 'ta1-trace-e3-official-1.json.4'
     },
+    # 分布在ta1-trace-e3-official-1.json.0、ta1-trace-e3-official-1.json.3和ta1-trace-e3-official-1.json.4 (4 max)
     'theia': {
         'train': ['ta1-theia-e3-official-6r.json', 'ta1-theia-e3-official-6r.json.1', 'ta1-theia-e3-official-6r.json.2',
                   'ta1-theia-e3-official-6r.json.3'],
         'test': ['ta1-theia-e3-official-6r.json.8']
     },
+    # 分布在ta1-theia-e3-official-6r.json、ta1-theia-e3-official-6r.json.1、ta1-theia-e3-official-6r.json.2、ta1-theia-e3-official-6r.json.3、ta1-theia-e3-official-6r.json.8
     'cadets': {
-        'train': ['ta1-cadets-e3-official.json', 'ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2',
+        'train': ['ta1-cadets-e3-official.json.0', 'ta1-cadets-e3-official.json.1', 'ta1-cadets-e3-official.json.2',
                   'ta1-cadets-e3-official-2.json.1'],
-        'test': ['ta1-cadets-e3-official-2.json']
+        'test': ['ta1-cadets-e3-official-2.json.0']
+    # 分布在ta1-cadets-e3-official.json.0、ta1-cadets-e3-official-2.json.0和ta1-cadets-e3-official-2.json.1
     }
 }
 
@@ -232,10 +236,18 @@ def preprocess_entity_attr(dataset):
                         dst2 = pattern_dst2.findall(line)[0]
                     if len(pattern_time.findall(line)) > 0:
                         time = pattern_time.findall(line)[0]
+                    if "EVENT_ADD_OBJECT_ATTRIBUTE" == event_type:  # Object1 -> Object2
+                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                            dst1) + '\t' + str(dst2) + '\t' + str(
+                            src) + '\t' + str(time) + '\n'
+                    else:
+                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                            src) + '\t' + str(dst1) + '\t' + str(
+                            dst2) + '\t' + str(time) + '\n'
                     # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(
-                        dst1) + '\t' + str(
-                        dst2) + '\t' + str(time) + '\n'
+                    # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(
+                    #     dst1) + '\t' + str(
+                    #     dst2) + '\t' + str(time) + '\n'
                     fw_event.write(attr_event)
             fw_src.close()
             fw_principal.close()
@@ -324,7 +336,12 @@ def preprocess(dataset):
                         # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
                         #     seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
                         #     dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
-                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                        if "EVENT_ADD_OBJECT_ATTRIBUTE" == event_type: # Object1 -> Object2
+                            attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                                dst1) + '\t' + str(dst2) + '\t' + str(
+                                src) + '\t' + str(time) + '\n'
+                        else:
+                            attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
                             src) + '\t' + str(dst1) + '\t' + str(
                             dst2) + '\t' + str(time) + '\n'
                         fw_event.write(attr_event)
@@ -383,9 +400,9 @@ def find_entity_pair(dataset):
             # 训练的时候只用正常的数据进行训练,排除掉
             if src in malicious_entities and id_entity_map[src] != 'MemoryObject':
                 continue
-            if dst1 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+            if dst1 in malicious_entities and id_entity_map[dst1] != 'MemoryObject':
                 continue
-            if dst2 in malicious_entities and id_entity_map[src] != 'MemoryObject':
+            if dst2 in malicious_entities and id_entity_map[dst2] != 'MemoryObject':
                 continue
             attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
             # 考虑加入unnamed
@@ -406,8 +423,8 @@ def find_entity_pair(dataset):
                     src_dst_pair = (dst1, src)
                     if src_dst_pair not in src_dst_deduplication_train:
                         src_dst_deduplication_train.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
                         entity_pairs.append(entity_pair)
                 else:
                     src_dst_pair = (src, dst1)
@@ -521,6 +538,8 @@ def find_entity_pair(dataset):
 
 
 def ip_to_binary_list(ip):
+    if ip == 'localhost':
+        ip = '127.0.0.1'  # 针对freebsd
     if pd.isna(ip):
         return torch.zeros(128, dtype=torch.int32)
     ip_int = int(ipaddress.ip_address(ip))
@@ -582,15 +601,23 @@ def get_cnt(df, attr_type):
 def get_embedding(df, attr_type):
     if attr_type == 'cmdline':
         # 将cmdline和path转换为特征向量
-        vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
-        cmdline_features = vectorizer.fit_transform(df['cmdline'].fillna(''))  # 处理空值
-        cmdline_features = cmdline_features.toarray()
+        if df['cmdline'].isnull().all() or df['cmdline'].str.strip().eq('').all():
+            # 如果全为空，返回128维全零向量
+            cmdline_features = np.zeros((df.shape[0], 128))
+        else:
+            vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+            cmdline_features = vectorizer.fit_transform(df['cmdline'].fillna(''))  # 处理空值
+            cmdline_features = cmdline_features.toarray()
         df['cmdline'] = list(cmdline_features)
         return df
     elif attr_type == 'path':
-        vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
-        path_features = vectorizer.fit_transform(df['path'].fillna(''))  # 处理空值
-        path_features = path_features.toarray()
+        if df['path'].isnull().all() or df['path'].str.strip().eq('').all():
+            # 如果全为空，返回128维全零向量
+            path_features = np.zeros((df.shape[0], 128))
+        else:
+            vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+            path_features = vectorizer.fit_transform(df['path'].fillna(''))  # 处理空值
+            path_features = path_features.toarray()
         df['path'] = list(path_features)
         return df
     else:
@@ -619,7 +646,28 @@ def get_attrs(dataset, mode):
                                     'permission', 'path'])
             df = get_cnt(df, 'file_type')
             df = get_embedding(df, 'path')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # cadets存在重复情况
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # 查找 'uuid' 列中重复的条目
+            # df['file_type'] = df['file_type'].apply(lambda x: str(x) if isinstance(x, np.ndarray) else x)
+            #
+            # duplicates = df.groupby('uuid')['file_type'].nunique()  # 统计每个 uuid 对应 file_type 的唯一值数量
+
+            # 找到 file_type 不唯一的 uuid
+            # inconsistent_uuids = duplicates[duplicates > 1]
+
+            # 输出有不一致的 uuid 和对应的 file_type
+            # for uuid in inconsistent_uuids.index:
+            #     inconsistent_records = df[df['uuid'] == uuid]
+            #     print(f"UUID: {uuid} has inconsistent file_type values:")
+            #     print(inconsistent_records[['uuid', 'file_type']])
+            # duplicates = df[df.duplicated(subset='uuid', keep=False)]  # keep=False 会标记所有重复的行
+            # sampled_duplicates = duplicates.sample(n=200, random_state=42)  # random_state 保证每次抽样结果相同
+            # # 输出到文件（例如 CSV）
+            # sampled_duplicates.to_csv('sampled_duplicates.csv', index=False)
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+
     if os.path.exists('./dataset/{}/attr_netflow.txt'.format(dataset)):
         with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as f_netflow:
             df = pd.read_csv(f_netflow,
@@ -664,7 +712,12 @@ def get_attrs(dataset, mode):
                              usecols=['uuid', 'record', 'event_type', 'time']
                              )
             df = get_cnt(df, 'event_type')
-            uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
+            # if dataset == 'cadets':
+            #     uuid_to_edge_attrs.update(df.set_index(['uuid', 'event_type']).to_dict('index'))
+            # else:
+            #     uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_edge_attrs.update(df_last.set_index('uuid').to_dict('index'))
     with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
 
@@ -694,6 +747,8 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
     cnt_node = 0
     src_node_cnt = 0
     dst_node_cnt = 0
+    if event_uuid not in uuid_to_edge_attrs:
+        print(event_uuid)
     event_attr = uuid_to_edge_attrs[event_uuid]
     src_attr = uuid_to_node_attrs[src_uuid]
     dst_attr = uuid_to_node_attrs[dst_uuid]
@@ -758,7 +813,28 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
     # 将所有节点的特征相加
     sub_g_embedding = torch.stack(node_embeddings).sum(dim=0)
     return sub_g_embedding
-
+    # fixed_dim = 128
+    # class WeightLearner(nn.Module):
+    #     def __init__(self, input_dim, output_dim):
+    #         super(WeightLearner, self).__init__()
+    #         self.fc = nn.Linear(input_dim, output_dim)
+    #
+    #     def forward(self, x):
+    #         return torch.sigmoid(self.fc(x))
+    #
+    # learner = WeightLearner(input_dim=fixed_dim, output_dim=1)
+    # # 假设每个特征的嵌入是固定维度，使用固定的特征张量
+    # for attr_name, attr_value in processed_types.items():
+    #     node_embedding = torch.tensor(attr_value, dtype=torch.float32)
+    #     node_embeddings.append(node_embedding)
+    # node_embeddings = torch.stack(node_embeddings)
+    #
+    # # 计算每个特征的权重
+    # feature_weights = learner(node_embeddings)  # 获取每个特征的权重
+    # # 加权求和
+    # weighted_embeddings = node_embeddings * feature_weights.view(-1, 1)
+    # sub_g_embedding = weighted_embeddings.sum(dim=0)
+    # return sub_g_embedding
 
 def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode):
     cnt = 0
@@ -782,35 +858,83 @@ def sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs
                     'src': cnt_record_map[event[1]],
                     'dst': cnt_record_map[event[2]],
                 }
-                # attr_dict = ['Event', 'Subject', 'FileObject', 'NetFlowObject', 'MemoryObject']
-                # 这个判定条件移动到了find_entity_pair中
-                # if id_entity_map[entity_pair['src']] in attr_dict and id_entity_map[entity_pair['dst']] in attr_dict:
                 event_uuid = entity_pair['event']
                 src_uuid = entity_pair['src']
                 dst_uuid = entity_pair['dst']
                 cnt += 1
+                if mode == 'test':
+                    # cadets 用首尾俩节点判定
+                    # if src_uuid in malicious_entities and dst_uuid in malicious_entities and id_entity_map[src_uuid] != 'MemoryObject':
+                    #     malicious_cnt_list.append(cnt)
+                    if src_uuid in malicious_entities and id_entity_map[src_uuid] != 'MemoryObject':
+                        malicious_cnt_list.append(cnt)
                 # if mode == 'test':
                 #     if src_uuid in malicious_entities or dst_uuid in malicious_entities:
                 #         malicious_cnt_list.append(cnt)
-                if mode == 'test':
-                    if src_uuid in malicious_entities and src_uuid:
-                        malicious_cnt_list.append(cnt)
+                # if mode == 'test':
+                #     if (src_uuid in malicious_entities or dst_uuid in malicious_entities) and id_entity_map[src_uuid] != 'MemoryObject' and id_entity_map[dst_uuid] != 'MemoryObject':
+                #         malicious_cnt_list.append(cnt)
                 sub_g = single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs,
                                                   uuid_to_edge_attrs)
                 sub_g_embedding = sub_g_embedding_aggregation(sub_g)
                 g_nodes.append((cnt, {"attr": sub_g_embedding}))
-        # g_nodes_list.append(g_nodes)
         with open('./dataset/{}/{}/g_nodes_list_{}.pkl'.format(dataset, mode, file_cnt), 'wb') as f:
             pkl.dump(g_nodes, f)
             file_cnt += 1
     if mode == 'test':
         pkl.dump(malicious_cnt_list, open('./dataset/{}/test/malicious.pkl'.format(dataset), 'wb'))
-    # return g_nodes_list
     return
 
+
+# 同时发生的max_freq=813 和malicious同时发生的max_cnt=322 发现节点对中应该相连的发生的时间频率并不高
+# def confirm_time_distributed_of_malicious(dataset, mode):
+#     cnt = 0
+#     malicious_cnt_list = {}
+#     malicious_entities = './groundtruth/{}.txt'.format(dataset)
+#     f = open(malicious_entities, 'r')
+#     malicious_entities = set()
+#     freq = {}
+#     cnt_record_map={}
+#     if os.path.exists('./dataset/{}/cnt_record_map.json'.format(dataset)):
+#         with open('./dataset/{}/cnt_record_map.json'.format(dataset), 'r',
+#                   encoding='utf-8') as f_cnt_record_map:
+#             print('loading cnt_record_map')
+#             cnt_record_map = json.load(f_cnt_record_map)
+#     for l in f.readlines():
+#         malicious_entities.add(l.lstrip().rstrip())
+#     for file in metadata[dataset][mode]:
+#         path = './dataset/{}/{}/'.format(dataset, mode) + file + '.txt'
+#         with open(path, 'r', encoding='utf-8') as f:
+#             map_a = defaultdict(list)
+#             map_b = defaultdict(list)
+#             for line in f:
+#                 cnt += 1
+#                 event, src, dst, time = line.strip().split('\t')
+#                 hash_dst = hash(dst)
+#                 hash_src = hash(src)
+#                 map_a[hash_dst].append((cnt, time))
+#                 map_b[hash_src].append((cnt, time))
+#             for hash_dst in tqdm(map_a, total=len(map_a)):
+#                 if hash_dst in map_b:
+#                     cnt_list_a = map_a[hash_dst]
+#                     cnt_list_b = map_b[hash_dst]
+#
+#                     # 检查时间频次
+#                     def check_time_frequency(events):
+#                         time_freq = Counter([event[1] for event in events])
+#                         return time_freq
+#                     a=check_time_frequency(cnt_list_a)
+#                     b = check_time_frequency(cnt_list_a)
+#                     max_time = 0
+#                     for i in a:
+#                         max_time=max(max_time,a[i])
+#                     for j in b:
+#                         max_time=max(max_time,b[j])
+#                     print(max_time)
 # 若遇到节点出度入度过大，采样20条边添加，边以cnt形式表示，若node_list中发现edge_list中没有的cnt，说明该边没有被采样，所以舍弃该节点对
 
 def graph_edge_construction(dataset, mode):
+    random.seed(0)
     g_edges_list = []
     cnt = 0
     print('processing g_edges_list')
@@ -827,21 +951,22 @@ def graph_edge_construction(dataset, mode):
                 hash_src = hash(src)
                 map_a[hash_dst].append(cnt)
                 map_b[hash_src].append(cnt)
+
             for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
                     cnt_list_a = map_a[hash_dst]
                     cnt_list_b = map_b[hash_dst]
-                    # 如果 cnt_list_a 或 cnt_list_b 的元素小于 100，则创建所有的边
-                    if len(cnt_list_a) < 100 and len(cnt_list_b) < 100:
+                    # 如果 cnt_list_a 或 cnt_list_b 的元素小于 100，则创建所有的边 20250114 improve 20%
+                    if len(cnt_list_a) < 200 and len(cnt_list_b) < 200:
                         for event_src in cnt_list_a:
                             for event_dst in cnt_list_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
                     else:
                         # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 100 条数据
-                        sampled_a = random.sample(cnt_list_a, min(100, len(cnt_list_a)))
-                        sampled_b = random.sample(cnt_list_b, min(100, len(cnt_list_b)))
-
+                        sampled_a = random.sample(cnt_list_a, min(200, len(cnt_list_a)))
+                        sampled_b = random.sample(cnt_list_b, min(200, len(cnt_list_b)))
+                        # 怎么样尽可能采样到恶意节点
                         for event_src in sampled_a:
                             for event_dst in sampled_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
@@ -862,23 +987,22 @@ def graph_node_construction(dataset, mode):
     else:
         raise NotImplementedError("There is not pkl file")
     id_entity_map, cnt_record_map = get_maps(dataset)
-    sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map,cnt_record_map, mode)
+    sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode)
     print("g_nodes_list is ready")
-    # with open('./dataset/{}/{}/g_nodes_list.pkl'.format(dataset, mode), 'wb') as f:
-    #     pkl.dump(g_nodes_list, f)
+
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
     parser.add_argument("--dataset", type=str, default="trace")
-    parser.add_argument("--mode", type=str, default="test")
+    parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
     mode = args.mode
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
     # preprocess_entity_attr(dataset)
-    # malicious_type(dataset)
+    # # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
