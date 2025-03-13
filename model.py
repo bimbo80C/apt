@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dgl.nn.pytorch import GATConv, SAGEConv
-from utils import sce_loss, create_norm, GAT
+from utils import sce_loss, GAT
 class SAGENet(torch.nn.Module):
     def __init__(self, in_dim, out_dim, mask_rate=0.3, concat=False):
         super(SAGENet, self).__init__()
@@ -24,8 +24,6 @@ class SAGENet(torch.nn.Module):
     def compute_loss(self, g):
         masked_g, (mask_nodes, _) = self.mask_nodes(g, self.mask_rate)
         h = masked_g.ndata['attr'].float()  # 确保输入特征为 float32,从掩码图中获取节点属性
-                # Encoder part
-        h = masked_g.ndata['attr'].float()  # Get node features
         h = self.encoder_conv1(masked_g, h)
         h = F.relu(h)
         h = self.encoder_conv2(masked_g, h)
@@ -101,7 +99,6 @@ class GCNModel(nn.Module):
         h = masked_g.ndata['attr'].float()  # 确保输入特征为 float32,从掩码图中获取节点属性
         # print(h.shape)
         for layer in self.encoder:
-
             h = layer(masked_g, h)
             if len(h.shape) == 3:
                 h = h.reshape(h.shape[0], -1)
@@ -134,7 +131,7 @@ class GCNModel(nn.Module):
         return new_g, (mask_nodes, keep_nodes)
     
 class GMAEModel(nn.Module):
-    def __init__(self, n_dim, hidden_dim, n_layers, n_heads, activation,feat_drop, negative_slope, residual, norm, mask_rate=0.5, loss_fn="sce", alpha_l=2):
+    def __init__(self, n_dim, hidden_dim, n_layers, n_heads, activation,feat_drop, negative_slope, residual, mask_rate=0.5, loss_fn="sce", alpha_l=2):
         super(GMAEModel, self).__init__()
         self._mask_rate = mask_rate
         self._output_hidden_size = hidden_dim
@@ -148,22 +145,22 @@ class GMAEModel(nn.Module):
         # build encoder
         self.encoder = GAT(
             n_dim= n_dim, 
-            hidden_dim=enc_num_hidden, 
+            hidden_dim=hidden_dim, 
             out_dim=enc_num_hidden, # 16
-            n_layers=n_layers,# 2
+            n_layers= n_layers,# 2
             n_heads=enc_nhead, # 4
             n_heads_out=enc_nhead, # 4
-            concat_out=True,
             activation=activation,
             feat_drop=feat_drop,
             attn_drop=0.0,
             negative_slope=negative_slope,
             residual=residual,
-            norm=create_norm(norm),
             encoding=True,
         )
 
-        # build decoder for attribute prediction
+        total_hidden_dim = hidden_dim * n_layers 
+        self.encoder_to_decoder = nn.Linear(total_hidden_dim, dec_in_dim) 
+
         self.decoder = GAT(
             n_dim=dec_in_dim,
             hidden_dim=dec_num_hidden,
@@ -171,17 +168,15 @@ class GMAEModel(nn.Module):
             n_layers=1,
             n_heads=n_heads,
             n_heads_out=1,
-            concat_out=True,
             activation=activation,
             feat_drop=feat_drop,
             attn_drop=0.0,
             negative_slope=negative_slope,
             residual=residual,
-            norm=create_norm(norm),
             encoding=False,
         )
+
         self.enc_mask_token = nn.Parameter(torch.zeros(1, n_dim))
-        self.encoder_to_decoder = nn.Linear(dec_in_dim * n_layers, dec_in_dim, bias=False)
         self.criterion = self.setup_loss_fn(loss_fn, alpha_l)
 
     def setup_loss_fn(self, loss_fn, alpha_l):
@@ -213,12 +208,15 @@ class GMAEModel(nn.Module):
         # Feature Reconstruction
         pre_use_g, (mask_nodes, keep_nodes) = self.encoding_mask_noise(g, self._mask_rate)
         pre_use_x = pre_use_g.ndata['attr'].to(pre_use_g.device)
+        print("pre_use_x shape:", pre_use_x.shape)
         use_g = pre_use_g
         enc_rep, all_hidden = self.encoder(use_g, pre_use_x, return_hidden=True)
         enc_rep = torch.cat(all_hidden, dim=1)
+        print("[DEBUG] enc_rep shape:", enc_rep.shape)
         rep = self.encoder_to_decoder(enc_rep)
-
+        print("[DEBUG] rep shape:", enc_rep.shape)   # [num_nodes, 64]
         recon = self.decoder(pre_use_g, rep)
+        print("[DEBUG] rep shape:", enc_rep.shape)   # [num_nodes, 128]
         x_init = g.ndata['attr'][mask_nodes]
         x_rec = recon[mask_nodes]
         loss = self.criterion(x_rec, x_init)

@@ -11,7 +11,7 @@ from model import GCNModel,GMAEModel,SAGENet
 import argparse
 from loaddata import load_darpa_dataset
 from sklearn.manifold import TSNE
-
+import torch.nn.functional as F
 
 
 
@@ -128,22 +128,21 @@ if __name__ == '__main__':
     # Ours
     # model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
     # Threatrace
-    model = SAGENet(in_dim, hidden_dim)
+    # model = SAGENet(in_dim, hidden_dim)
     # MAGIC
-    # model = GMAEModel(
-    #     n_dim= in_dim,  
-    #     hidden_dim= hidden_dim,
-    #     n_layers= num_layers,
-    #     n_heads=4,
-    #     activation="prelu",
-    #     feat_drop=0.1,
-    #     negative_slope=0.2,
-    #     residual=True,
-    #     mask_rate=0.5,
-    #     norm='BatchNorm',
-    #     loss_fn='sce',
-    #     alpha_l=1.3
-    # )
+    model = GMAEModel(
+        n_dim= in_dim,  
+        hidden_dim= hidden_dim,
+        n_layers= num_layers,
+        n_heads=4,
+        activation=F.relu,
+        feat_drop=0.1,
+        negative_slope=0.2,
+        residual=True,
+        mask_rate=0.5,
+        loss_fn='sce',
+        alpha_l=1.3
+    )
     model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
     model = model.to(device)
     model.eval()
