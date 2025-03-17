@@ -599,6 +599,10 @@ def get_cnt(df, attr_type):
     #     df['time'] = pd.Categorical(df['time']).codes
     #     df[attr_type] = list(one_hot_encode(df, attr_type))
     #     return df
+    # elif attr_type == 'tgid':
+    #     df['tgid'] = pd.Categorical(df['tgid']).codes
+    #     df[attr_type] = list(one_hot_encode(df, attr_type))
+    #     return df
     # elif attr_type in ['tgid', 'parent', 'thread_id']:
     #     if df[attr_type].isnull().all():
     #         df[attr_type] = np.zeros((len(df), 64)).tolist()
@@ -1048,6 +1052,6 @@ if __name__ == '__main__':
     # # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
-    # get_attrs(dataset,mode)
+    get_attrs(dataset,mode)
     graph_node_construction(dataset, mode)
     graph_edge_construction(dataset, mode)
