@@ -594,6 +594,34 @@ def get_cnt(df, attr_type):
         df['event_type'] = pd.Categorical(df['event_type']).codes
         df[attr_type] = list(one_hot_encode(df, attr_type))
         return df
+    # 新增细节信息
+    # elif attr_type == 'time':
+    #     df['time'] = pd.Categorical(df['time']).codes
+    #     df[attr_type] = list(one_hot_encode(df, attr_type))
+    #     return df
+    # elif attr_type in ['tgid', 'parent', 'thread_id']:
+    #     if df[attr_type].isnull().all():
+    #         df[attr_type] = np.zeros((len(df), 64)).tolist()
+    #     else:
+    #         filled_series = df[attr_type].fillna(0).astype(int)
+    #         n_bins = 10
+    #         if filled_series.nunique() <= 1:
+    #             binned = pd.Series([0] * len(filled_series))
+    #         else:
+    #             min_val = filled_series.min()
+    #             max_val = filled_series.max()
+    #             if min_val == max_val:
+    #                 max_val += 1
+    #             bins = np.linspace(min_val, max_val, n_bins+1)
+    #             binned = pd.cut(filled_series, 
+    #                         bins=bins, 
+    #                         labels=range(n_bins),
+    #                         include_lowest=True)
+    #             binned = binned.cat.add_categories(-1).fillna(-1) 
+    #         df[attr_type] = binned.astype(str)
+    #         encoded = one_hot_encode(df, attr_type, max_dim=64)
+    #         df[attr_type] = encoded.tolist()
+    #     return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
 
@@ -620,6 +648,16 @@ def get_embedding(df, attr_type):
             path_features = path_features.toarray()
         df['path'] = list(path_features)
         return df
+    elif attr_type == 'permission':
+        if df['permission'].isnull().all() or df['permission'].str.strip().eq('').all():
+            # 如果全为空，返回128维全零向量
+            permission_features = np.zeros((df.shape[0], 128))
+        else:
+            vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+            permission_features = vectorizer.fit_transform(df['permission'].fillna(''))  # 处理空值
+            permission_features = permission_features.toarray()
+        df['permission'] = list(permission_features)
+        return df
     else:
         raise NotImplementedError("This type is not included")
 
@@ -637,7 +675,12 @@ def get_attrs(dataset, mode):
                                     'unit_id', 'cmdline'])
             df = get_cnt(df, 'subject_type')
             df = get_embedding(df, 'cmdline')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # 新增的细节信息
+            # df = get_cnt(df, 'cid')
+            # df = get_cnt(df, 'parent')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
@@ -647,6 +690,8 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'file_type')
             df = get_embedding(df, 'path')
             # cadets存在重复情况
+            # 新增的细节信息
+            df = get_embedding(df, 'permission')
             df_last = df.drop_duplicates(subset='uuid', keep='last')
             uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
             # 查找 'uuid' 列中重复的条目
@@ -682,7 +727,9 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'local_port')
             df = get_cnt(df, 'remote_address')
             df = get_cnt(df, 'remote_port')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
         with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem:
@@ -693,15 +740,11 @@ def get_attrs(dataset, mode):
                                     'tgid',
                                     'size'])
             df = get_cnt(df, 'memory_address')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-
-    # if os.path.exists('./dataset/{}/attr_unnamed.txt'.format(dataset)):
-    #     with open('./dataset/{}/attr_unnamed.txt'.format(dataset), 'r', encoding='utf-8') as f_unnamed:
-    #         df = pd.read_csv(f_unnamed,
-    #                          sep='\t',
-    #                          names=['uuid', 'record', 'epoch', 'pid', 'source_file_descriptor', 'sink_file_descriptor']
-    #                          )
-    #         uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # 新增的细节信息
+            # df = get_cnt(df, 'tgid')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
@@ -712,6 +755,8 @@ def get_attrs(dataset, mode):
                              usecols=['uuid', 'record', 'event_type', 'time']
                              )
             df = get_cnt(df, 'event_type')
+            # 新增的细节信息
+            # df = get_cnt(df, 'time')
             # if dataset == 'cadets':
             #     uuid_to_edge_attrs.update(df.set_index(['uuid', 'event_type']).to_dict('index'))
             # else:
@@ -739,11 +784,9 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
     sub_g = nx.DiGraph()
     key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
-    # key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
-    # detail_attr_dict = ['cmdline', 'file_type']
-    # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
-    #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、remote_port、ip_protocol
+    # detail_attr_dict = [] #只使用key_attr_dict
+    # detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port'] #使用部分细节
+    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port','permission'] #使用细节信息
     cnt_node = 0
     src_node_cnt = 0
     dst_node_cnt = 0
