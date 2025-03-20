@@ -17,6 +17,8 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import random
 from collections import Counter
+import psutil
+import tracemalloc
 
 metadata = {
     'trace': {
@@ -594,6 +596,38 @@ def get_cnt(df, attr_type):
         df['event_type'] = pd.Categorical(df['event_type']).codes
         df[attr_type] = list(one_hot_encode(df, attr_type))
         return df
+    # 新增细节信息
+    # elif attr_type == 'time':
+    #     df['time'] = pd.Categorical(df['time']).codes
+    #     df[attr_type] = list(one_hot_encode(df, attr_type))
+    #     return df
+    # elif attr_type == 'tgid':
+    #     df['tgid'] = pd.Categorical(df['tgid']).codes
+    #     df[attr_type] = list(one_hot_encode(df, attr_type))
+    #     return df
+    # elif attr_type in ['tgid', 'parent', 'thread_id']:
+    #     if df[attr_type].isnull().all():
+    #         df[attr_type] = np.zeros((len(df), 64)).tolist()
+    #     else:
+    #         filled_series = df[attr_type].fillna(0).astype(int)
+    #         n_bins = 10
+    #         if filled_series.nunique() <= 1:
+    #             binned = pd.Series([0] * len(filled_series))
+    #         else:
+    #             min_val = filled_series.min()
+    #             max_val = filled_series.max()
+    #             if min_val == max_val:
+    #                 max_val += 1
+    #             bins = np.linspace(min_val, max_val, n_bins+1)
+    #             binned = pd.cut(filled_series, 
+    #                         bins=bins, 
+    #                         labels=range(n_bins),
+    #                         include_lowest=True)
+    #             binned = binned.cat.add_categories(-1).fillna(-1) 
+    #         df[attr_type] = binned.astype(str)
+    #         encoded = one_hot_encode(df, attr_type, max_dim=64)
+    #         df[attr_type] = encoded.tolist()
+    #     return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
 
@@ -620,6 +654,16 @@ def get_embedding(df, attr_type):
             path_features = path_features.toarray()
         df['path'] = list(path_features)
         return df
+    elif attr_type == 'permission':
+        if df['permission'].isnull().all() or df['permission'].str.strip().eq('').all():
+            # 如果全为空，返回128维全零向量
+            permission_features = np.zeros((df.shape[0], 128))
+        else:
+            vectorizer = TfidfVectorizer(max_features=128)  # 可以调整特征维度
+            permission_features = vectorizer.fit_transform(df['permission'].fillna(''))  # 处理空值
+            permission_features = permission_features.toarray()
+        df['permission'] = list(permission_features)
+        return df
     else:
         raise NotImplementedError("This type is not included")
 
@@ -637,7 +681,12 @@ def get_attrs(dataset, mode):
                                     'unit_id', 'cmdline'])
             df = get_cnt(df, 'subject_type')
             df = get_embedding(df, 'cmdline')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # 新增的细节信息
+            # df = get_cnt(df, 'cid')
+            # df = get_cnt(df, 'parent')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
@@ -647,6 +696,8 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'file_type')
             df = get_embedding(df, 'path')
             # cadets存在重复情况
+            # 新增的细节信息
+            df = get_embedding(df, 'permission')
             df_last = df.drop_duplicates(subset='uuid', keep='last')
             uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
             # 查找 'uuid' 列中重复的条目
@@ -682,7 +733,9 @@ def get_attrs(dataset, mode):
             df = get_cnt(df, 'local_port')
             df = get_cnt(df, 'remote_address')
             df = get_cnt(df, 'remote_port')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
         with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem:
@@ -693,15 +746,11 @@ def get_attrs(dataset, mode):
                                     'tgid',
                                     'size'])
             df = get_cnt(df, 'memory_address')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-
-    # if os.path.exists('./dataset/{}/attr_unnamed.txt'.format(dataset)):
-    #     with open('./dataset/{}/attr_unnamed.txt'.format(dataset), 'r', encoding='utf-8') as f_unnamed:
-    #         df = pd.read_csv(f_unnamed,
-    #                          sep='\t',
-    #                          names=['uuid', 'record', 'epoch', 'pid', 'source_file_descriptor', 'sink_file_descriptor']
-    #                          )
-    #         uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            # 新增的细节信息
+            # df = get_cnt(df, 'tgid')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
@@ -712,6 +761,8 @@ def get_attrs(dataset, mode):
                              usecols=['uuid', 'record', 'event_type', 'time']
                              )
             df = get_cnt(df, 'event_type')
+            # 新增的细节信息
+            # df = get_cnt(df, 'time')
             # if dataset == 'cadets':
             #     uuid_to_edge_attrs.update(df.set_index(['uuid', 'event_type']).to_dict('index'))
             # else:
@@ -739,11 +790,9 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
     sub_g = nx.DiGraph()
     key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
-    # key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
-    # detail_attr_dict = ['cmdline', 'file_type']
-    # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
-    #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、remote_port、ip_protocol
+    # detail_attr_dict = [] #只使用key_attr_dict
+    # detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port'] #使用部分细节
+    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port','permission'] #使用细节信息
     cnt_node = 0
     src_node_cnt = 0
     dst_node_cnt = 0
@@ -940,6 +989,7 @@ def graph_edge_construction(dataset, mode):
     print('processing g_edges_list')
     for file in metadata[dataset][mode]:
         path = './dataset/{}/{}/'.format(dataset, mode) + file + '.txt'
+        print(path)
         g_edges_set = set()
         with open(path, 'r', encoding='utf-8') as f:
             map_a = defaultdict(list)
@@ -951,21 +1001,23 @@ def graph_edge_construction(dataset, mode):
                 hash_src = hash(src)
                 map_a[hash_dst].append(cnt)
                 map_b[hash_src].append(cnt)
-
+                # whole_map_a[hash_dst].append(map_a[hash_dst])
+                # whole_map_b[hash_src].append(map_b[hash_src])
+            alpha = 246
             for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
                     cnt_list_a = map_a[hash_dst]
                     cnt_list_b = map_b[hash_dst]
                     # 如果 cnt_list_a 或 cnt_list_b 的元素小于 100，则创建所有的边 20250114 improve 20%
-                    if len(cnt_list_a) < 200 and len(cnt_list_b) < 200:
+                    if len(cnt_list_a) < alpha and len(cnt_list_b) < alpha:
                         for event_src in cnt_list_a:
                             for event_dst in cnt_list_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
                     else:
                         # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 100 条数据
-                        sampled_a = random.sample(cnt_list_a, min(200, len(cnt_list_a)))
-                        sampled_b = random.sample(cnt_list_b, min(200, len(cnt_list_b)))
+                        sampled_a = random.sample(cnt_list_a, min(alpha, len(cnt_list_a)))
+                        sampled_b = random.sample(cnt_list_b, min(alpha, len(cnt_list_b)))
                         # 怎么样尽可能采样到恶意节点
                         for event_src in sampled_a:
                             for event_dst in sampled_b:
@@ -990,7 +1042,13 @@ def graph_node_construction(dataset, mode):
     sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode)
     print("g_nodes_list is ready")
 
-
+def graph_edge_construction_with_memory(dataset, mode):
+    tracemalloc.start()  # 开始内存跟踪
+    graph_edge_construction(dataset, mode)  # 运行原函数
+    current, peak = tracemalloc.get_traced_memory()  # 获取当前 & 峰值内存
+    tracemalloc.stop()
+    print(f"当前内存使用: {current / 1024 / 1024:.2f} MB")
+    print(f"峰值内存使用: {peak / 1024 / 1024:.2f} MB")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
@@ -1006,5 +1064,6 @@ if __name__ == '__main__':
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    graph_node_construction(dataset, mode)
-    graph_edge_construction(dataset, mode)
+    # graph_node_construction(dataset, mode)
+    # graph_edge_construction(dataset, mode)
+    graph_edge_construction_with_memory(dataset, mode)
