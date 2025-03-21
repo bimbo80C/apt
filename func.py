@@ -487,8 +487,8 @@ def find_entity_pair(dataset):
                     src_dst_pair = (dst1, src)
                     if src_dst_pair not in src_dst_deduplication_test:
                         src_dst_deduplication_test.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst1]) + '\t' + str(time)
+                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
+                            record_cnt_map[src]) + '\t' + str(time)
                         entity_pairs.append(entity_pair)
                 else:
                     src_dst_pair = (src, dst1)
@@ -861,6 +861,24 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
             node_embeddings.append(torch.tensor(attr_value))
     # 将所有节点的特征相加
     sub_g_embedding = torch.stack(node_embeddings).sum(dim=0)
+    # [DEBUG]
+    numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
+    df = pd.DataFrame(numpy_array)
+
+    # 追加到CSV文件
+    csv_file_path = "./sub_g_embedding.csv"
+    df.to_csv(csv_file_path, mode='a', index=False, header=False)
+
+    # 追加到JSON文件（使用JSON Lines格式）
+    json_file_path = "./sub_g_embedding.json"
+    with open(json_file_path, 'a') as f:
+        # 转换为JSON Lines格式（每行一个JSON对象）
+        json_str = df.to_json(orient='records', lines=True)
+        f.write(json_str)
+        # 确保每条记录换行
+        if not json_str.endswith('\n'):
+            f.write('\n')
+    # [DEBUG]
     return sub_g_embedding
     # fixed_dim = 128
     # class WeightLearner(nn.Module):
@@ -1003,7 +1021,7 @@ def graph_edge_construction(dataset, mode):
                 map_b[hash_src].append(cnt)
                 # whole_map_a[hash_dst].append(map_a[hash_dst])
                 # whole_map_b[hash_src].append(map_b[hash_src])
-            alpha = 246
+            alpha = 100
             for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
                     cnt_list_a = map_a[hash_dst]
@@ -1052,7 +1070,7 @@ def graph_edge_construction_with_memory(dataset, mode):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
-    parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--dataset", type=str, default="cadets")
     parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
@@ -1064,6 +1082,6 @@ if __name__ == '__main__':
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    # graph_node_construction(dataset, mode)
-    # graph_edge_construction(dataset, mode)
-    graph_edge_construction_with_memory(dataset, mode)
+    graph_node_construction(dataset, mode)
+    graph_edge_construction(dataset, mode)
+    # graph_edge_construction_with_memory(dataset, mode)
