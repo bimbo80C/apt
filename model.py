@@ -92,7 +92,6 @@ class GCNModel(nn.Module):
         h = masked_g.ndata['attr'].float()  # 确保输入特征为 float32,从掩码图中获取节点属性
         # print(h.shape)
         for layer in self.encoder:
-
             h = layer(masked_g, h)
             if len(h.shape) == 3:
                 h = h.reshape(h.shape[0], -1)

@@ -16,14 +16,17 @@ from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import random
+import tracemalloc
 from collections import Counter
 
 metadata = {
     'trace': {
         'train': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
                   'ta1-trace-e3-official-1.json.3'],
-        'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
-                 'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']  # 'ta1-trace-e3-official-1.json.4'
+        # 'test': ['ta1-trace-e3-official-1.json.0', 'ta1-trace-e3-official-1.json.1', 'ta1-trace-e3-official-1.json.2',
+        #          'ta1-trace-e3-official-1.json.3', 'ta1-trace-e3-official-1.json.4']  # 'ta1-trace-e3-official-1.json.4'
+        'test': [ 'ta1-trace-e3-official-1.json.0','ta1-trace-e3-official-1.json.3','ta1-trace-e3-official-1.json.4']
+
     },
     # 分布在ta1-trace-e3-official-1.json.0、ta1-trace-e3-official-1.json.3和ta1-trace-e3-official-1.json.4 (4 max)
     'theia': {
@@ -244,10 +247,6 @@ def preprocess_entity_attr(dataset):
                         attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
                             src) + '\t' + str(dst1) + '\t' + str(
                             dst2) + '\t' + str(time) + '\n'
-                    # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(src) + '\t' + str(
-                    #     dst1) + '\t' + str(
-                    #     dst2) + '\t' + str(time) + '\n'
                     fw_event.write(attr_event)
             fw_src.close()
             fw_principal.close()
@@ -332,10 +331,6 @@ def preprocess(dataset):
                             dst2 = pattern_dst2.findall(line)[0]
                         if len(pattern_time.findall(line)) > 0:
                             time = pattern_time.findall(line)[0]
-                        # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                        # attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
-                        #     seq) + '\t' + str(thread_id) + '\t' + str(src) + '\t' + str(dst1) + '\t' + str(
-                        #     dst2) + '\t' + str(size) + '\t' + str(time) + '\n'
                         if "EVENT_ADD_OBJECT_ATTRIBUTE" == event_type: # Object1 -> Object2
                             attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
                                 dst1) + '\t' + str(dst2) + '\t' + str(
@@ -419,40 +414,54 @@ def find_entity_pair(dataset):
                 if dst1 not in record_cnt_map:
                     record_cnt_map[dst1] = entity_cnt
                     entity_cnt += 1
-                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    src_dst_pair = (dst1, src)
-                    if src_dst_pair not in src_dst_deduplication_train:
-                        src_dst_deduplication_train.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
-                            record_cnt_map[src]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
-                else:
-                    src_dst_pair = (src, dst1)
-                    if src_dst_pair not in src_dst_deduplication_train:
-                        src_dst_deduplication_train.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst1]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
+                src_dst_pair = (src, dst1)
+                if src_dst_pair not in src_dst_deduplication_train:
+                    src_dst_deduplication_train.add(src_dst_pair)
+                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                        record_cnt_map[dst1]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst1, src)
+                #     if src_dst_pair not in src_dst_deduplication_train:
+                #         src_dst_deduplication_train.add(src_dst_pair)
+                #         # entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
+                #         #     record_cnt_map[src]) + '\t' + str(time)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst1]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
+                # else:
+                #     src_dst_pair = (src, dst1)
+                #     if src_dst_pair not in src_dst_deduplication_train:
+                #         src_dst_deduplication_train.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst1]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
             if dst2 in id_entity_map:
                 if id_entity_map[dst2] not in attr_dict:
                     continue
                 if dst2 not in record_cnt_map:
                     record_cnt_map[dst2] = entity_cnt
                     entity_cnt += 1
-                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    src_dst_pair = (dst2, src)
-                    if src_dst_pair not in src_dst_deduplication_train:
-                        src_dst_deduplication_train.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
-                            record_cnt_map[src]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
-                else:
-                    src_dst_pair = (src, dst2)
-                    if src_dst_pair not in src_dst_deduplication_train:
-                        src_dst_deduplication_train.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst2]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
+                src_dst_pair = (src, dst2)
+                if src_dst_pair not in src_dst_deduplication_train:
+                    src_dst_deduplication_train.add(src_dst_pair)
+                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                        record_cnt_map[dst2]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst2, src)
+                #     if src_dst_pair not in src_dst_deduplication_train:
+                #         src_dst_deduplication_train.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
+                #             record_cnt_map[src]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
+                # else:
+                #     src_dst_pair = (src, dst2)
+                #     if src_dst_pair not in src_dst_deduplication_train:
+                #         src_dst_deduplication_train.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst2]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
         entity_pairs.sort(key=lambda l: l[4])
         with open('./dataset/{}/{}/'.format(dataset, 'train') + file + '.txt', "w") as fw_entity_pair:
             for pair in entity_pairs:
@@ -481,40 +490,54 @@ def find_entity_pair(dataset):
                 if dst1 not in record_cnt_map:
                     record_cnt_map[dst1] = entity_cnt
                     entity_cnt += 1
-                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    src_dst_pair = (dst1, src)
-                    if src_dst_pair not in src_dst_deduplication_test:
-                        src_dst_deduplication_test.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst1]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
-                else:
-                    src_dst_pair = (src, dst1)
-                    if src_dst_pair not in src_dst_deduplication_test:
-                        src_dst_deduplication_test.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst1]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
+                src_dst_pair = (src, dst1)
+                if src_dst_pair not in src_dst_deduplication_test:
+                    src_dst_deduplication_test.add(src_dst_pair)
+                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                        record_cnt_map[dst1]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst1, src)
+                #     if src_dst_pair not in src_dst_deduplication_test:
+                #         src_dst_deduplication_test.add(src_dst_pair)
+                #         # entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst1]) + '\t' + str(
+                #         #     record_cnt_map[src]) + '\t' + str(time)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst1]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
+                # else:
+                #     src_dst_pair = (src, dst1)
+                #     if src_dst_pair not in src_dst_deduplication_test:
+                #         src_dst_deduplication_test.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst1]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
             if dst2 in id_entity_map:
                 if id_entity_map[dst2] not in attr_dict:
                     continue
                 if dst2 not in record_cnt_map:
                     record_cnt_map[dst2] = entity_cnt
                     entity_cnt += 1
-                if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
-                    src_dst_pair = (dst2, src)
-                    if src_dst_pair not in src_dst_deduplication_test:
-                        src_dst_deduplication_test.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
-                            record_cnt_map[src]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
-                else:
-                    src_dst_pair = (src, dst2)
-                    if src_dst_pair not in src_dst_deduplication_test:
-                        src_dst_deduplication_test.add(src_dst_pair)
-                        entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
-                            record_cnt_map[dst2]) + '\t' + str(time)
-                        entity_pairs.append(entity_pair)
+                src_dst_pair = (src, dst2)
+                if src_dst_pair not in src_dst_deduplication_test:
+                    src_dst_deduplication_test.add(src_dst_pair)
+                    entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                        record_cnt_map[dst2]) + '\t' + str(time)
+                    entity_pairs.append(entity_pair)
+                # if 'READ' in event_type or 'RECV' in event_type or 'LOAD' in event_type:
+                #     src_dst_pair = (dst2, src)
+                #     if src_dst_pair not in src_dst_deduplication_test:
+                #         src_dst_deduplication_test.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[dst2]) + '\t' + str(
+                #             record_cnt_map[src]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
+                # else:
+                #     src_dst_pair = (src, dst2)
+                #     if src_dst_pair not in src_dst_deduplication_test:
+                #         src_dst_deduplication_test.add(src_dst_pair)
+                #         entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
+                #             record_cnt_map[dst2]) + '\t' + str(time)
+                #         entity_pairs.append(entity_pair)
         entity_pairs.sort(key=lambda l: l[4])
         with open('./dataset/{}/{}/'.format(dataset, 'test') + file + '.txt', "w") as fw_entity_pair:
             for pair in entity_pairs:
@@ -594,6 +617,10 @@ def get_cnt(df, attr_type):
         df['event_type'] = pd.Categorical(df['event_type']).codes
         df[attr_type] = list(one_hot_encode(df, attr_type))
         return df
+    elif attr_type == 'permission':
+        df['permission'] = pd.Categorical(df['permission']).codes
+        df[attr_type] = list(one_hot_encode(df, attr_type))
+        return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
 
@@ -645,10 +672,12 @@ def get_attrs(dataset, mode):
                              names=['uuid', 'record', 'file_type', 'epoch',
                                     'permission', 'path'])
             df = get_cnt(df, 'file_type')
+            df = get_cnt(df, 'permission')
             df = get_embedding(df, 'path')
             # cadets存在重复情况
-            df_last = df.drop_duplicates(subset='uuid', keep='last')
-            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # df_last = df.drop_duplicates(subset='uuid', keep='last')
+            # uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
             # 查找 'uuid' 列中重复的条目
             # df['file_type'] = df['file_type'].apply(lambda x: str(x) if isinstance(x, np.ndarray) else x)
             #
@@ -716,8 +745,9 @@ def get_attrs(dataset, mode):
             #     uuid_to_edge_attrs.update(df.set_index(['uuid', 'event_type']).to_dict('index'))
             # else:
             #     uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
-            df_last = df.drop_duplicates(subset='uuid', keep='last')
-            uuid_to_edge_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            # df_last = df.drop_duplicates(subset='uuid', keep='last')
+            # uuid_to_edge_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
     with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
 
@@ -739,7 +769,10 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
     sub_g = nx.DiGraph()
     key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port','permission']
+    # detail_attr_dict = []
+    # detail_attr_dict = ['permission']
+    # detail_attr_dict = ['permission','tgid','parent','cid']
     # key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
     # detail_attr_dict = ['cmdline', 'file_type']
     # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
@@ -812,6 +845,24 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
             node_embeddings.append(torch.tensor(attr_value))
     # 将所有节点的特征相加
     sub_g_embedding = torch.stack(node_embeddings).sum(dim=0)
+    # [DEBUG]
+    numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
+    df = pd.DataFrame(numpy_array)
+
+    # 追加到CSV文件
+    csv_file_path = "./sub_g_embedding.csv"
+    df.to_csv(csv_file_path, mode='a', index=False, header=False)
+
+    # 追加到JSON文件（使用JSON Lines格式）
+    json_file_path = "./sub_g_embedding.json"
+    with open(json_file_path, 'a') as f:
+        # 转换为JSON Lines格式（每行一个JSON对象）
+        json_str = df.to_json(orient='records', lines=True)
+        f.write(json_str)
+        # 确保每条记录换行
+        if not json_str.endswith('\n'):
+            f.write('\n')
+    # [DEBUG]
     return sub_g_embedding
     # fixed_dim = 128
     # class WeightLearner(nn.Module):
@@ -951,21 +1002,21 @@ def graph_edge_construction(dataset, mode):
                 hash_src = hash(src)
                 map_a[hash_dst].append(cnt)
                 map_b[hash_src].append(cnt)
-
+            alpha = 130 #list中元素个数比这个小的,也就是能完全采样的。占到10%-90%
             for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
                     cnt_list_a = map_a[hash_dst]
                     cnt_list_b = map_b[hash_dst]
                     # 如果 cnt_list_a 或 cnt_list_b 的元素小于 100，则创建所有的边 20250114 improve 20%
-                    if len(cnt_list_a) < 200 and len(cnt_list_b) < 200:
+                    if len(cnt_list_a) < alpha and len(cnt_list_b) < alpha:
                         for event_src in cnt_list_a:
                             for event_dst in cnt_list_b:
                                 if event_src != event_dst and (event_src, event_dst) not in g_edges_set:
                                     g_edges_set.add((event_src, event_dst))
                     else:
                         # 否则从 cnt_list_a 和 cnt_list_b 中各自随机采样 100 条数据
-                        sampled_a = random.sample(cnt_list_a, min(200, len(cnt_list_a)))
-                        sampled_b = random.sample(cnt_list_b, min(200, len(cnt_list_b)))
+                        sampled_a = random.sample(cnt_list_a, min(alpha, len(cnt_list_a)))
+                        sampled_b = random.sample(cnt_list_b, min(alpha, len(cnt_list_b)))
                         # 怎么样尽可能采样到恶意节点
                         for event_src in sampled_a:
                             for event_dst in sampled_b:
@@ -991,6 +1042,13 @@ def graph_node_construction(dataset, mode):
     print("g_nodes_list is ready")
 
 
+def graph_edge_construction_with_memory(dataset, mode):
+    tracemalloc.start()  # 开始内存跟踪
+    graph_edge_construction(dataset, mode)  # 运行原函数
+    current, peak = tracemalloc.get_traced_memory()  # 获取当前 & 峰值内存
+    tracemalloc.stop()
+    print(f"当前内存使用: {current / 1024 / 1024:.2f} MB")
+    print(f"峰值内存使用: {peak / 1024 / 1024:.2f} MB")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
@@ -1001,10 +1059,17 @@ if __name__ == '__main__':
     mode = args.mode
     if dataset not in ['trace', 'theia', 'cadets']:
         raise NotImplementedError("This dataset is not included")
+    # 先执行preprocess_entity_attr、preprocess、find_entity_pair、get_attrs
+    # 然后训练测试模块各执行一次node和edge构建
     # preprocess_entity_attr(dataset)
     # # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    graph_node_construction(dataset, mode)
-    graph_edge_construction(dataset, mode)
+    # # # =================
+    # graph_node_construction(dataset,"train" )
+    # graph_edge_construction(dataset, "train")
+    # graph_edge_construction_with_memory(dataset, "train")
+    graph_node_construction(dataset, "test")
+    graph_edge_construction(dataset, "test")
+    # graph_edge_construction_with_memory(dataset, "test")

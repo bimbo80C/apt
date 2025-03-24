@@ -261,19 +261,66 @@ def get_cnt(df, attr_type):
         return df
 from collections import defaultdict, Counter
 from tqdm import tqdm
+import pandas as pd
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 if __name__ == "__main__":
-    np.random.seed(42)  # 设置随机种子，确保结果可重复
-    x_train = np.random.rand(1000, 10)  # 随机生成一个 1000x10 的数组
-    idx = list(range(x_train.shape[0]))
-    # 打乱 x_train 的索引
+    # 读取数据，假设数据是 tab 分隔的，文件名为 'data.txt'
+    df = pd.read_csv('statistics(1).txt', sep='\t', header=None)
 
-    # 获取前 min(50000, x_train.shape[0]) 个样本的切片
-    sample_size = min(2, x_train.shape[0])  # 如果 x_train 的样本数小于 50000，则选择所有样本
-    subset = x_train[idx][:sample_size]  # 使用 idx 索引并进行切片
+    # 提取第三列数据
+    third_column = df[2]
+    percentiles = [i / 10000 for i in range(9990, 9999)]  # 99.90%到99.99%每隔0.01%
+    values_at_percentiles = third_column.quantile(percentiles)
 
-    # 输出结果
-    print("Subset shape:", subset.shape)
-    print("Subset data preview:\n", subset[:10])  #
+    # 打印结果
+    for percentile, value in zip(percentiles, values_at_percentiles):
+        print(f"{percentile * 100}%: {value}")
+
+    # # 计算最大1%区间的数据
+    # percentile_99 = third_column.quantile(0.9999)
+
+    # # 提取最大1%数据
+    # top_1_percent = third_column[third_column >= percentile_99]
+    #
+    # # 计算每个数据在最大1%数据中的占比
+    # top_1_percent_count = top_1_percent.count()
+    # total_count = third_column.count()
+    #
+    # # 绘制数据大小与占比之间的关系图
+    # plt.figure(figsize=(10, 6))
+    #
+    # # 统计数据大小与对应占比
+    # top_1_percent_sorted = top_1_percent.sort_values()
+    #
+    # # 计算对应的占比
+    # cumulative_percentage = (top_1_percent_sorted.rank() / top_1_percent_count) * 100
+    #
+    # plt.plot(top_1_percent_sorted, cumulative_percentage, label="Cumulative Distribution", color='b')
+    #
+    # # 设置图表标签
+    # plt.title("Distribution of Top 1% Data")
+    # plt.xlabel("Data Value")
+    # plt.ylabel("Cumulative Percentage (%)")
+    # plt.grid(True)
+    #
+    # # 显示图例
+    # plt.legend()
+    # plt.show()
+
+    # np.random.seed(42)  # 设置随机种子，确保结果可重复
+    # x_train = np.random.rand(1000, 10)  # 随机生成一个 1000x10 的数组
+    # idx = list(range(x_train.shape[0]))
+    # # 打乱 x_train 的索引
+    #
+    # # 获取前 min(50000, x_train.shape[0]) 个样本的切片
+    # sample_size = min(2, x_train.shape[0])  # 如果 x_train 的样本数小于 50000，则选择所有样本
+    # subset = x_train[idx][:sample_size]  # 使用 idx 索引并进行切片
+    #
+    # # 输出结果
+    # print("Subset shape:", subset.shape)
+    # print("Subset data preview:\n", subset[:10])  #
     # dataset='trace'
     # g_edges_list = []
     # cnt = 0

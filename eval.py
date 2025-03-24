@@ -69,14 +69,16 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     auc = roc_auc_score(y_test, score)  # 计算AUC分数
     prec, rec, threshold = precision_recall_curve(y_test, score)
     # 假设 prec 是一个 numpy 数组
-    with open('outputrec.txt', 'w') as f_rec:
-        for p in rec:
-            f_rec.write(f'{p}\n')
-
-    with open('outputprec.txt', 'w') as f_prec:
-        for p in prec:
-            f_prec.write(f'{p}\n')
-
+    # with open('outputrec.txt', 'w') as f_rec:
+    #     for p in rec:
+    #         f_rec.write(f'{p}\n')
+    #
+    # with open('outputprec.txt', 'w') as f_prec:
+    #     for p in prec:
+    #         f_prec.write(f'{p}\n')
+    with open('output_rec_prec.txt', 'w') as f_out:
+        for r, p in zip(rec, prec):
+            f_out.write(f'{r} and {p}\n')
     f1 = 2 * prec * rec / (rec + prec + 1e-9)
     best_idx = -1
     for i in range(len(f1)):
@@ -177,7 +179,8 @@ if __name__ == '__main__':
         x_test = []
         for i in range(len(whole_g)):
             g= whole_g[i].to(device)
-
+            # cadets len(whole_g)=1
+            # i (=0)
             if i != len(whole_g) - 1: # 可能换数据集有问题
                 skip_benign += g.number_of_nodes()
             x_test.append(model.embed(g).cpu().numpy())
