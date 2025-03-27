@@ -5,12 +5,14 @@ import argparse
 import torch
 from tqdm import tqdm
 import os
-
-
 import pickle as pkl
+
+IN_DIM = 128
+HIDDEN_DIM = 64
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
-    parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--dataset", type=str, default="theia")
     # parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
@@ -21,9 +23,8 @@ if __name__ == '__main__':
 
     whole_g = load_darpa_dataset(dataset,mode='train')
     # features = train_g.ndata['attr']
-    # in_dim = features.shape[1]  # in_dim = 128
-    in_dim = 128
-    hidden_dim = 64
+    in_dim = IN_DIM
+    hidden_dim = HIDDEN_DIM
     num_layers = 2
     model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -46,4 +47,5 @@ if __name__ == '__main__':
         epoch_iter.set_description(f"Epoch {epoch} | train_loss: {epoch_loss:.4f}")
     torch.save(model.state_dict(), "./checkpoints/checkpoint-{}.pt".format(dataset))
     save_dict_path = './eval_result/distance_save_{}.pkl'.format(dataset)
-    os.unlink(save_dict_path)
+    if os.path.exists(save_dict_path):
+       os.unlink(save_dict_path)

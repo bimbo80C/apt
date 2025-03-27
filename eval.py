@@ -11,7 +11,11 @@ from model import GCNModel
 import argparse
 from loaddata import load_darpa_dataset
 from sklearn.manifold import TSNE
-import concurrent.futures
+import torch.nn.functional as F
+IN_DIM = 128
+HIDDEN_DIM = 64
+
+
 def save_seed(seed, filename='random_seed.pkl'):
     with open(filename, 'wb') as f:
         pkl.dump(seed, f)
@@ -27,15 +31,29 @@ def set_random_seed(seed):
 
 
 def evaluate_using_knn(dataset, x_train, x_test, y_test):
-    # 对训练数据和测试数据进行归一化，然后使用 K 近邻算法（KNN）对训练数据进行拟合
     epsilon = 1e-8  # 设定一个很小的值，防止除零 for cadets
     x_train_mean = x_train.mean(axis=0)
     x_train_std = x_train.std(axis=0)
     x_train_std[x_train_std == 0] = epsilon
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
+    # 打印这些值
+    file_path = 'output_values.txt'
+    with open(file_path, 'w') as file:
+        file.write("x_train_mean:\n")
+        file.write(np.array2string(x_train_mean, precision=4, separator=',') + "\n\n")
+        
+        file.write("x_train_std:\n")
+        file.write(np.array2string(x_train_std, precision=4, separator=',') + "\n\n")
+        
+        file.write("x_train:\n")
+        file.write(np.array2string(x_train, precision=4, separator=',') + "\n\n")
+        np.set_printoptions(threshold=np.inf, linewidth=np.inf)
+        file.write("x_test:\n")
+        file.write(np.array2string(x_test, precision=4, separator=',') + "\n")
+
     if dataset == 'cadets':
-        n_neighbors = 200
+        n_neighbors = 20
     else:
         n_neighbors = 10
 
@@ -48,8 +66,6 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         idx = list(range(x_train.shape[0]))
         random.shuffle(idx)
         print("begin knn model training")
-        # tree = KDTree(x_train)
-        # distances, _ = tree.query(x_train[idx][:min(50000, x_train.shape[0])], k=n_neighbors)
         distances, _ = nbrs.kneighbors(x_train[idx][:min(500, x_train.shape[0])], n_neighbors=n_neighbors)
         del x_train
         mean_distance = distances.mean()
@@ -64,21 +80,24 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         with open(save_dict_path, 'rb') as f:
             mean_distance, distances = pkl.load(f)
     print('knn for eval is loaded')
-    score = distances / mean_distance  # 异常分数 score越大越可能异常
+    score = distances / mean_distance
+    output_file = 'score_output.txt'
+    with open(output_file, 'w') as f:
+        # 写入 score 的值
+        for s in score:
+            f.write(f"{s}\n")  
     del distances
-    auc = roc_auc_score(y_test, score)  # 计算AUC分数
+    auc = roc_auc_score(y_test, score)
     prec, rec, threshold = precision_recall_curve(y_test, score)
     # 假设 prec 是一个 numpy 数组
-    # with open('outputrec.txt', 'w') as f_rec:
-    #     for p in rec:
-    #         f_rec.write(f'{p}\n')
-    #
-    # with open('outputprec.txt', 'w') as f_prec:
-    #     for p in prec:
-    #         f_prec.write(f'{p}\n')
-    with open('output_rec_prec.txt', 'w') as f_out:
-        for r, p in zip(rec, prec):
-            f_out.write(f'{r} and {p}\n')
+    with open('outputrec.txt', 'w') as f_rec:
+        for p in rec:
+            f_rec.write(f'{p}\n')
+
+    with open('outputprec.txt', 'w') as f_prec:
+        for p in prec:
+            f_prec.write(f'{p}\n')
+
     f1 = 2 * prec * rec / (rec + prec + 1e-9)
     best_idx = -1
     for i in range(len(f1)):
@@ -86,15 +105,13 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         if dataset == 'trace' and rec[i] < 0.95:
             best_idx = i - 1
             break
-        if dataset == 'theia' and rec[i] < 0.99996:
+        if dataset == 'theia' and rec[i] < 0.95:
             best_idx = i - 1
             break
         if dataset == 'cadets' and rec[i] < 0.95:
             best_idx = i - 1
             break
     best_thres = threshold[best_idx]
-    # print('best_idx:{}'.format(best_idx))
-    # print(best_thres)
     tn = 0
     fn = 0
     tp = 0
@@ -118,52 +135,42 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     print('FP: {}'.format(fp))
     return auc, 0.0, None, None
 
-
-# #多线程操作
-# def embed_graph(model, g, device):
-#     g = g.to(device)
-#     embedded = model.embed(g).detach().cpu().numpy()
-#     del g  # Free memory after use
-#     return embedded
-#
-# #Multithreaded embedding
-# def multithreaded_embedding(whole_g, model, device, num_threads=4):
-#     x_train = []
-#
-#     with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-#         futures = [executor.submit(embed_graph, model, g, device) for g in whole_g]
-#
-#         for future in concurrent.futures.as_completed(futures):
-#             x_train.append(future.result())
-#
-#     return x_train
-# #===========
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
-    parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--dataset", type=str, default="theia")
     args = parser.parse_args()
     dataset = args.dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device is {}".format(device))
-    hidden_dim = 64
-    num_layers = 2
     set_random_seed(0)
-    in_dim = 128
-
+    in_dim = IN_DIM
+    hidden_dim = HIDDEN_DIM
+    num_layers = 2
+    # Ours
     model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
-    # checkpoint = torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device)
+    # Threatrace
+    # model = SAGENet(in_dim, hidden_dim)
+    # MAGIC
+    # model = GMAEModel(
+    #     n_dim= in_dim,  
+    #     hidden_dim= hidden_dim,
+    #     n_layers= num_layers,
+    #     n_heads=4,
+    #     activation=F.relu,
+    #     feat_drop=0.1,
+    #     negative_slope=0.2,
+    #     residual=True,
+    #     mask_rate=0.5,
+    #     loss_fn='sce',
+    #     alpha_l=1.3
+    # )
     model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
     model = model.to(device)
     model.eval()
-    #太多了筛选一下
-
     malicious_list = []
     if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
         with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
             malicious_list = pkl.load(f)
-    # print(malicious_list)
-    # 准备好knn的输入
     with torch.no_grad():
         whole_g = load_darpa_dataset(dataset)
         x_train = []
@@ -171,7 +178,6 @@ if __name__ == '__main__':
             g= whole_g[i].to(device)
             x_train.append(model.embed(g).cpu().numpy())
             del g
-        # x_train =multithreaded_embedding(whole_g, model, device, num_threads=4)
         x_train = np.concatenate(x_train, axis=0)
         print('trained embed is loaded')
         skip_benign = 0
@@ -179,42 +185,36 @@ if __name__ == '__main__':
         x_test = []
         for i in range(len(whole_g)):
             g= whole_g[i].to(device)
-            # cadets len(whole_g)=1
-            # i (=0)
-            if i != len(whole_g) - 1: # 可能换数据集有问题
+            if i != len(whole_g) - 1: 
                 skip_benign += g.number_of_nodes()
             x_test.append(model.embed(g).cpu().numpy())
         x_test = np.concatenate(x_test, axis=0)
         print('embed for test is loaded')
-
-
-        # tsne = TSNE(n_components=2, random_state=42)
-        # # 合并训练集和测试集以确保降维时不会出现信息丢失
-        #
-        # num_samples = 30000  # 例如选择 30 万条数据
-        # # 从训练集和测试集分别采样 30 万条
-        # indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
-        # indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
-        # x_train_sampled = x_train[indices_train]
-        # x_test_sampled = x_test[indices_test]
-        # # 使用 t-SNE 对训练集和测试集的特征进行降维
-        # x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
-        # x_all_embedded = tsne.fit_transform(x_all_sampled)
-        # # 将降维后的结果分开成训练集和测试集
-        # x_train_embedded = x_all_embedded[:num_samples]
-        # x_test_embedded = x_all_embedded[num_samples:]
-        # # 绘制 2D 散点图
-        # plt.figure(figsize=(8, 6))
-        # # 绘制训练集的散点图，使用不同颜色表示不同数据
-        # plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
-        # # 绘制测试集的散点图
-        # plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
-        # # 设置图例
-        # plt.legend()
-        # # 设置标题
-        # plt.title("t-SNE Visualization of Train and Test Embeddings")
-        # # 显示图形
-        # plt.show()
+        tsne = TSNE(n_components=2, random_state=42)
+        # 合并训练集和测试集以确保降维时不会出现信息丢失
+        num_samples = 3000  
+        indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
+        indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
+        x_train_sampled = x_train[indices_train]
+        x_test_sampled = x_test[indices_test]
+        # 使用 t-SNE 对训练集和测试集的特征进行降维
+        x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
+        x_all_embedded = tsne.fit_transform(x_all_sampled)
+        # 将降维后的结果分开成训练集和测试集
+        x_train_embedded = x_all_embedded[:num_samples]
+        x_test_embedded = x_all_embedded[num_samples:]
+        # 绘制 2D 散点图
+        plt.figure(figsize=(8, 6))
+        # 绘制训练集的散点图，使用不同颜色表示不同数据
+        plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+        # 绘制测试集的散点图
+        plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+        # 设置图例
+        plt.legend()
+        # 设置标题
+        plt.title("t-SNE Visualization of Train and Test Embeddings")
+        # 保存图形
+        plt.savefig("t_sne_plot.png", dpi=300, bbox_inches='tight')
         n = x_test.shape[0]  # 测试集样本数量
         y_test = np.zeros(n)  # 测试集标签
         y_test[malicious_list] = 1.0
@@ -226,6 +226,5 @@ if __name__ == '__main__':
         result_x_test = x_test[test_idx]
         result_y_test = y_test[test_idx]
         del x_test, y_test
-        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test,
-                                                                   result_y_test)
+        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test, result_y_test)
     print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")

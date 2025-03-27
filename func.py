@@ -63,6 +63,7 @@ pattern_local_principal = re.compile(r'localPrincipal\":\"(.*?)\",')
 pattern_start_time = re.compile(r'startTimestampNanos\":(.*?),')
 pattern_unit_id = re.compile(r'unitId\":\{\"int\":(.*?)\},')
 pattern_cmdline = re.compile(r'cmdLine\":\{\"string\":\"(.*?)\"\}')
+
 pattern_properties1 = re.compile(
     r'properties\":\{\"map\":\{\"map\":\{\"name\":\"(.*?)\",\"seentime\":\"(.*?)\",\"ppid\":\"(.*?)\"')
 pattern_properties2 = re.compile(
@@ -70,6 +71,10 @@ pattern_properties2 = re.compile(
 ###### for FileObject(uuid,type,epoch)
 pattern_permission = re.compile(r'com.bbn.tc.schema.avro.cdm18.SHORT\":\"(.*?)\"')
 pattern_path = re.compile(r'path\":\"(.*?)\"')
+pattern_path_uuid = re.compile(r'predicateObject\":\{\"com.bbn.tc.schema.avro.cdm18.UUID\":\"(.*?)\"}')
+pattern_path_uuid2 = re.compile(r'predicateObject2\":\{\"com.bbn.tc.schema.avro.cdm18.UUID\":\"(.*?)\"}')
+pattern_path_cadets =   re.compile(r'predicateObjectPath\":\{\"string\":\"(.*?)\"\}')
+pattern_path2_cadets =   re.compile(r'predicateObject2Path\":\{\"string\":\"(.*?)\"\}')
 ###### for NetFlowObject(uuid,epoch)
 pattern_local_address = re.compile(r'localAddress\":\"(.*?)\"')
 pattern_local_port = re.compile(r'localPort\":(.*?),')
@@ -100,162 +105,188 @@ name_map = {
     "UnnamedPipeObject": "unnamed"
 }
 
-
+def get_uuid_path_map(dataset):
+    uuid_path_map = {}
+    for file in os.listdir('./dataset/{}/origin_json/'.format(dataset)):
+        print('reading {} ...'.format(file))
+        f = open('./dataset/{}/origin_json/'.format(dataset) + file, 'r', encoding='utf-8')
+        for line in tqdm(f):
+            if 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
+            if 'com.bbn.tc.schema.avro.cdm18.TimeMarker' in line or 'com.bbn.tc.schema.avro.cdm18.StartMarker' in line: continue
+            if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
+            record = pattern_record.findall(line)[0]
+            if record == 'Event':
+                if len(pattern_path_uuid.findall(line)) > 0:
+                    uuid = pattern_path_uuid.findall(line)[0]
+                    if len(pattern_path_cadets.findall(line)) > 0:
+                        path_cadets = pattern_path_cadets.findall(line)[0]
+                        uuid_path_map[uuid] = path_cadets
+                if len(pattern_path_uuid2.findall(line)) > 0:
+                    uuid = pattern_path_uuid2.findall(line)[0]
+                    if len(pattern_path2_cadets.findall(line)) > 0:
+                        path_cadets = pattern_path2_cadets.findall(line)[0]
+                        uuid_path_map[uuid] = path_cadets
+    with open('./dataset/{}/uuid_path_map.json'.format(dataset), 'w', encoding='utf-8') as fw_id_entity_map:
+        json.dump(uuid_path_map, fw_id_entity_map)
 # 先将所有实体和属性提取出来，数据集的分割按照event来
 def preprocess_entity_attr(dataset):
     id_entity_map = {}
-    for file in os.listdir(
-            './dataset/{}/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
-        if 'json' in file and '5' not in file and '6' not in file and 'id' not in file:
-            print('reading {} ...'.format(file))
-            f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
-            fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
-            fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
-            fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
-            fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
-            fw_netflow = open('./dataset/{}/'.format(dataset) + 'attr_netflow.txt', 'a', encoding='utf-8')
-            fw_memory = open('./dataset/{}/'.format(dataset) + 'attr_memory.txt', 'a', encoding='utf-8')
-            fw_unnamed = open('./dataset/{}/'.format(dataset) + 'attr_unnamed.txt', 'a', encoding='utf-8')
-            fw_event = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'a', encoding='utf-8')
-            for line in tqdm(f):
-                # 这几种不需要关注 few information
-                if 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
-                if 'com.bbn.tc.schema.avro.cdm18.TimeMarker' in line or 'com.bbn.tc.schema.avro.cdm18.StartMarker' in line: continue
-                if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
-                uuid = pattern_uuid.findall(line)[0]
-                record = pattern_record.findall(line)[0]
-                id_entity_map[uuid] = record  # all training dataset data
-                if record == 'SrcSinkObject':
-                    epoch = pid = fileDescriptor = 'null'
-                    if len(pattern_epoch.findall(line)) > 0:
-                        epoch = pattern_epoch.findall(line)[0]
-                    if len(pattern_pid.findall(line)) > 0:
-                        pid = pattern_pid.findall(line)[0]
-                    if len(pattern_fileDescriptor.findall(line)) > 0:
-                        fileDescriptor = pattern_fileDescriptor.findall(line)[0]
-                    attr_src = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
-                        pid) + '\t' + str(fileDescriptor) + '\n'
-                    fw_src.write(attr_src)
-                if record == 'Principal':
-                    user_id = euid = group_ids = principal_type = 'null'
-                    if len(pattern_user_id.findall(line)) > 0:
-                        user_id = pattern_user_id.findall(line)[0]
-                    if len(pattern_group_ids.findall(line)) > 0:
-                        group_ids = list(pattern_group_ids.findall(line)[0])
-                    if len(pattern_euid.findall(line)) > 0:
-                        euid = pattern_euid.findall(line)[0]
-                    if len(pattern_type.findall(line)) > 0:
-                        principal_type = pattern_type.findall(line)[0]
-                    attr_principal = str(uuid) + '\t' + str(record) + '\t' + str(principal_type) + '\t' + str(
-                        user_id) + '\t' + str(group_ids) + '\t' + str(euid) + '\n'
-                    fw_principal.write(attr_principal)
-                if record == 'Subject':
-                    subject_type = parent = local_principal = cid = start_time = unit_id = cmdline = 'null'
-                    if len(pattern_type.findall(line)) > 0:
-                        subject_type = pattern_type.findall(line)[0]
-                    if len(pattern_parent.findall(line)) > 0:
-                        parent = pattern_parent.findall(line)[0]
-                    if len(pattern_local_principal.findall(line)) > 0:
-                        local_principal = pattern_local_principal.findall(line)[0]
-                    if len(pattern_cid.findall(line)) > 0:
-                        cid = pattern_cid.findall(line)[0]
-                    if len(pattern_start_time.findall(line)) > 0:
-                        start_time = pattern_start_time.findall(line)[0]
-                    if len(pattern_unit_id.findall(line)) > 0:
-                        unit_id = pattern_unit_id.findall(line)[0]
-                    if len(pattern_cmdline.findall(line)) > 0:
-                        cmdline = pattern_cmdline.findall(line)[0]
-                    attr_subject = str(uuid) + '\t' + str(record) + '\t' + str(subject_type) + '\t' + str(
-                        parent) + '\t' + str(
-                        local_principal) + '\t' + str(cid) + '\t' + str(start_time) + '\t' + str(unit_id) + '\t' + str(
-                        cmdline) + '\n'
-                    fw_subject.write(attr_subject)
-                if record == 'FileObject':
-                    file_type = epoch = permission = path = 'null'
-                    if len(pattern_type.findall(line)) > 0:
-                        file_type = pattern_type.findall(line)[0]
-                    if len(pattern_epoch.findall(line)) > 0:
-                        epoch = pattern_epoch.findall(line)[0]
-                    if len(pattern_permission.findall(line)) > 0:
-                        permission = pattern_permission.findall(line)[0]
-                    if len(pattern_path.findall(line)) > 0:
-                        path = pattern_path.findall(line)[0]
-                    attr_file = str(uuid) + '\t' + str(record) + '\t' + str(file_type) + '\t' + str(
-                        epoch) + '\t' + str(permission) + '\t' + str(path) + '\n'
-                    fw_file.write(attr_file)
-                if record == 'NetFlowObject':
-                    epoch = local_address = local_port = remote_address = remote_port = ip_protocol = 'null'
-                    if len(pattern_epoch.findall(line)) > 0:
-                        epoch = pattern_epoch.findall(line)[0]
-                    if len(pattern_local_address.findall(line)) > 0:
-                        local_address = pattern_local_address.findall(line)[0]
-                    if len(pattern_local_port.findall(line)) > 0:
-                        local_port = pattern_local_port.findall(line)[0]
-                    if len(pattern_remote_address.findall(line)) > 0:
-                        remote_address = pattern_remote_address.findall(line)[0]
-                    if len(pattern_remote_port.findall(line)) > 0:
-                        remote_port = pattern_remote_port.findall(line)[0]
-                    if len(pattern_ip_protocol.findall(line)) > 0:
-                        ip_protocol = pattern_ip_protocol.findall(line)[0]
-                    attr_netflow = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
-                        local_address) + '\t' + str(local_port) + '\t' + str(remote_address) + '\t' + str(
-                        remote_port) + '\t' + str(ip_protocol) + '\n'
-                    fw_netflow.write(attr_netflow)
-                if record == 'MemoryObject':
-                    epoch = memory_address = tgid = size = 'null'
-                    if len(pattern_epoch.findall(line)) > 0:
-                        epoch = pattern_epoch.findall(line)[0]
-                    if len(pattern_memory_address.findall(line)) > 0:
-                        memory_address = pattern_memory_address.findall(line)[0]
-                    if len(pattern_tgid.findall(line)) > 0:
-                        tgid = pattern_tgid.findall(line)[0]
-                    if len(pattern_size.findall(line)) > 0:
-                        size = pattern_size.findall(line)[0]
-                    attr_memory = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
-                        memory_address) + '\t' + str(tgid) + '\t' + str(size) + '\n'
-                    fw_memory.write(attr_memory)
-                if record == 'UnnamedPipeObject':
-                    epoch = pid = source_file_descriptor = sink_file_descriptor = 'null'
-                    if len(pattern_epoch.findall(line)) > 0:
-                        epoch = pattern_epoch.findall(line)[0]
-                    if len(pattern_pid.findall(line)) > 0:
-                        pid = pattern_pid.findall(line)[0]
-                    if len(pattern_sourceFileDescriptor.findall(line)) > 0:
-                        source_file_descriptor = pattern_sourceFileDescriptor.findall(line)[0]
-                    if len(pattern_sinkFileDescriptor.findall(line)) > 0:
-                        sink_file_descriptor = pattern_sinkFileDescriptor.findall(line)[0]
-                    attr_unnamed = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
-                        pid) + '\t' + str(source_file_descriptor) + '\t' + str(sink_file_descriptor) + '\n'
-                    fw_unnamed.write(attr_unnamed)
-                if record == 'Event':
-                    event_type = src = dst1 = dst2 = time = 'null'
-                    if len(pattern_type.findall(line)) > 0:
-                        event_type = pattern_type.findall(line)[0]
-                    if len(pattern_src.findall(line)) > 0:
-                        src = pattern_src.findall(line)[0]
-                    if len(pattern_dst1.findall(line)) > 0:
-                        dst1 = pattern_dst1.findall(line)[0]
-                    if len(pattern_dst2.findall(line)) > 0:
-                        dst2 = pattern_dst2.findall(line)[0]
-                    if len(pattern_time.findall(line)) > 0:
-                        time = pattern_time.findall(line)[0]
-                    if "EVENT_ADD_OBJECT_ATTRIBUTE" == event_type:  # Object1 -> Object2
-                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
-                            dst1) + '\t' + str(dst2) + '\t' + str(
-                            src) + '\t' + str(time) + '\n'
-                    else:
-                        attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
-                            src) + '\t' + str(dst1) + '\t' + str(
-                            dst2) + '\t' + str(time) + '\n'
-                    fw_event.write(attr_event)
-            fw_src.close()
-            fw_principal.close()
-            fw_subject.close()
-            fw_file.close()
-            fw_netflow.close()
-            fw_memory.close()
-            fw_unnamed.close()
-            fw_event.close()
+    uuid_path_map_file = f'./dataset/{dataset}/uuid_path_map.json'
+    with open(uuid_path_map_file, 'r', encoding='utf-8') as f:
+        uuid_path_map = json.load(f)
+    for file in os.listdir('./dataset/{}/origin_json/'.format(dataset)):  # file ta1-trace-e3-official-1.json except 5 & 6 for testing
+        print('reading {} ...'.format(file))
+        f = open('./dataset/{}/origin_json/'.format(dataset) + file, 'r', encoding='utf-8')
+        fw_src = open('./dataset/{}/'.format(dataset) + 'attr_src.txt', 'a', encoding='utf-8')
+        fw_principal = open('./dataset/{}/'.format(dataset) + 'attr_principal.txt', 'a', encoding='utf-8')
+        fw_subject = open('./dataset/{}/'.format(dataset) + 'attr_subject.txt', 'a', encoding='utf-8')
+        fw_file = open('./dataset/{}/'.format(dataset) + 'attr_file.txt', 'a', encoding='utf-8')
+        fw_netflow = open('./dataset/{}/'.format(dataset) + 'attr_netflow.txt', 'a', encoding='utf-8')
+        fw_memory = open('./dataset/{}/'.format(dataset) + 'attr_memory.txt', 'a', encoding='utf-8')
+        fw_unnamed = open('./dataset/{}/'.format(dataset) + 'attr_unnamed.txt', 'a', encoding='utf-8')
+        fw_event = open('./dataset/{}/'.format(dataset) + 'attr_event.txt', 'a', encoding='utf-8')
+        
+        for line in tqdm(f):
+            # 这几种不需要关注 few information
+            if 'com.bbn.tc.schema.avro.cdm18.Host' in line: continue
+            if 'com.bbn.tc.schema.avro.cdm18.TimeMarker' in line or 'com.bbn.tc.schema.avro.cdm18.StartMarker' in line: continue
+            if 'com.bbn.tc.schema.avro.cdm18.UnitDependency' in line or 'com.bbn.tc.schema.avro.cdm18.EndMarker' in line: continue
+            uuid = pattern_uuid.findall(line)[0]
+            record = pattern_record.findall(line)[0]
+            id_entity_map[uuid] = record  # all training dataset data
+            if record == 'SrcSinkObject':
+                epoch = pid = fileDescriptor = 'null'
+                if len(pattern_epoch.findall(line)) > 0:
+                    epoch = pattern_epoch.findall(line)[0]
+                if len(pattern_pid.findall(line)) > 0:
+                    pid = pattern_pid.findall(line)[0]
+                if len(pattern_fileDescriptor.findall(line)) > 0:
+                    fileDescriptor = pattern_fileDescriptor.findall(line)[0]
+                attr_src = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
+                    pid) + '\t' + str(fileDescriptor) + '\n'
+                fw_src.write(attr_src)
+            if record == 'Principal':
+                user_id = euid = group_ids = principal_type = 'null'
+                if len(pattern_user_id.findall(line)) > 0:
+                    user_id = pattern_user_id.findall(line)[0]
+                if len(pattern_group_ids.findall(line)) > 0:
+                    group_ids = list(pattern_group_ids.findall(line)[0])
+                if len(pattern_euid.findall(line)) > 0:
+                    euid = pattern_euid.findall(line)[0]
+                if len(pattern_type.findall(line)) > 0:
+                    principal_type = pattern_type.findall(line)[0]
+                attr_principal = str(uuid) + '\t' + str(record) + '\t' + str(principal_type) + '\t' + str(
+                    user_id) + '\t' + str(group_ids) + '\t' + str(euid) + '\n'
+                fw_principal.write(attr_principal)
+            if record == 'Subject':
+                subject_type = parent = local_principal = cid = start_time = unit_id = cmdline = 'null'
+                if len(pattern_type.findall(line)) > 0:
+                    subject_type = pattern_type.findall(line)[0]
+                if len(pattern_parent.findall(line)) > 0:
+                    parent = pattern_parent.findall(line)[0]
+                if len(pattern_local_principal.findall(line)) > 0:
+                    local_principal = pattern_local_principal.findall(line)[0]
+                if len(pattern_cid.findall(line)) > 0:
+                    cid = pattern_cid.findall(line)[0]
+                if len(pattern_start_time.findall(line)) > 0:
+                    start_time = pattern_start_time.findall(line)[0]
+                if len(pattern_unit_id.findall(line)) > 0:
+                    unit_id = pattern_unit_id.findall(line)[0]
+                if len(pattern_cmdline.findall(line)) > 0:
+                    cmdline = pattern_cmdline.findall(line)[0]
+                attr_subject = str(uuid) + '\t' + str(record) + '\t' + str(subject_type) + '\t' + str(
+                    parent) + '\t' + str(
+                    local_principal) + '\t' + str(cid) + '\t' + str(start_time) + '\t' + str(unit_id) + '\t' + str(
+                    cmdline) + '\n'
+                fw_subject.write(attr_subject)
+            if record == 'FileObject':
+                file_type = epoch = permission = path = 'null'
+                if len(pattern_type.findall(line)) > 0:
+                    file_type = pattern_type.findall(line)[0]
+                if len(pattern_epoch.findall(line)) > 0:
+                    epoch = pattern_epoch.findall(line)[0]
+                if len(pattern_permission.findall(line)) > 0:
+                    permission = pattern_permission.findall(line)[0] 
+                if len(pattern_path.findall(line)) > 0:
+                    path = pattern_path.findall(line)[0]
+                if uuid in uuid_path_map:
+                    path = uuid_path_map[uuid]
+                attr_file = str(uuid) + '\t' + str(record) + '\t' + str(file_type) + '\t' + str(
+                    epoch) + '\t' + str(permission) + '\t' + str(path) + '\n'
+                fw_file.write(attr_file)
+            if record == 'NetFlowObject':
+                epoch = local_address = local_port = remote_address = remote_port = ip_protocol = 'null'
+                if len(pattern_epoch.findall(line)) > 0:
+                    epoch = pattern_epoch.findall(line)[0]
+                if len(pattern_local_address.findall(line)) > 0:
+                    local_address = pattern_local_address.findall(line)[0]
+                if len(pattern_local_port.findall(line)) > 0:
+                    local_port = pattern_local_port.findall(line)[0]
+                if len(pattern_remote_address.findall(line)) > 0:
+                    remote_address = pattern_remote_address.findall(line)[0]
+                if len(pattern_remote_port.findall(line)) > 0:
+                    remote_port = pattern_remote_port.findall(line)[0]
+                if len(pattern_ip_protocol.findall(line)) > 0:
+                    ip_protocol = pattern_ip_protocol.findall(line)[0]
+                attr_netflow = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
+                    local_address) + '\t' + str(local_port) + '\t' + str(remote_address) + '\t' + str(
+                    remote_port) + '\t' + str(ip_protocol) + '\n'
+                fw_netflow.write(attr_netflow)
+            if record == 'MemoryObject':
+                epoch = memory_address = tgid = size = 'null'
+                if len(pattern_epoch.findall(line)) > 0:
+                    epoch = pattern_epoch.findall(line)[0]
+                if len(pattern_memory_address.findall(line)) > 0:
+                    memory_address = pattern_memory_address.findall(line)[0]
+                if len(pattern_tgid.findall(line)) > 0:
+                    tgid = pattern_tgid.findall(line)[0]
+                if len(pattern_size.findall(line)) > 0:
+                    size = pattern_size.findall(line)[0]
+                attr_memory = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
+                    memory_address) + '\t' + str(tgid) + '\t' + str(size) + '\n'
+                fw_memory.write(attr_memory)
+            if record == 'UnnamedPipeObject':
+                epoch = pid = source_file_descriptor = sink_file_descriptor = 'null'
+                if len(pattern_epoch.findall(line)) > 0:
+                    epoch = pattern_epoch.findall(line)[0]
+                if len(pattern_pid.findall(line)) > 0:
+                    pid = pattern_pid.findall(line)[0]
+                if len(pattern_sourceFileDescriptor.findall(line)) > 0:
+                    source_file_descriptor = pattern_sourceFileDescriptor.findall(line)[0]
+                if len(pattern_sinkFileDescriptor.findall(line)) > 0:
+                    sink_file_descriptor = pattern_sinkFileDescriptor.findall(line)[0]
+                attr_unnamed = str(uuid) + '\t' + str(record) + '\t' + str(epoch) + '\t' + str(
+                    pid) + '\t' + str(source_file_descriptor) + '\t' + str(sink_file_descriptor) + '\n'
+                fw_unnamed.write(attr_unnamed)
+            if record == 'Event':
+                event_type = src = dst1 = dst2 = time = 'null'
+                if len(pattern_type.findall(line)) > 0:
+                    event_type = pattern_type.findall(line)[0]
+                if len(pattern_src.findall(line)) > 0:
+                    src = pattern_src.findall(line)[0]
+                if len(pattern_dst1.findall(line)) > 0:
+                    dst1 = pattern_dst1.findall(line)[0]
+                if len(pattern_dst2.findall(line)) > 0:
+                    dst2 = pattern_dst2.findall(line)[0]
+                if len(pattern_time.findall(line)) > 0:
+                    time = pattern_time.findall(line)[0]
+                if "EVENT_ADD_OBJECT_ATTRIBUTE" == event_type:  # Object1 -> Object2
+                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                        dst1) + '\t' + str(dst2) + '\t' + str(
+                        src) + '\t' + str(time) + '\n'
+                else:
+                    attr_event = str(uuid) + '\t' + str(record) + '\t' + str(event_type) + '\t' + str(
+                        src) + '\t' + str(dst1) + '\t' + str(
+                        dst2) + '\t' + str(time) + '\n'
+                fw_event.write(attr_event)
+        fw_src.close()
+        fw_principal.close()
+        fw_subject.close()
+        fw_file.close()
+        fw_netflow.close()
+        fw_memory.close()
+        fw_unnamed.close()
+        fw_event.close()
             # 从每一个文件当中提取字段
     if len(id_entity_map) != 0:
         fw_id_entity_map = open('./dataset/{}/'.format(dataset) + 'id_entity_map.json', 'w', encoding='utf-8')
@@ -305,7 +336,7 @@ def preprocess(dataset):
         for file in metadata[dataset][mode]:
             if os.path.exists('./dataset/{}/'.format(dataset) + file + '.txt'):
                 continue
-            f = open('./dataset/{}/'.format(dataset) + file, 'r', encoding='utf-8')
+            f = open('./dataset/{}/origin_json/'.format(dataset) + file, 'r', encoding='utf-8')
             fw_event = open('./dataset/{}/'.format(dataset) + file + '.txt', 'a', encoding='utf-8')
             print('processing {} ...'.format(file))
             for line in tqdm(f):
@@ -469,6 +500,7 @@ def find_entity_pair(dataset):
         fw_entity_pair.close()
         # finish the entity_pair.txt
     for file in metadata[dataset]['test']:
+        print(file)
         entity_pairs = []
         path = './dataset/{}/'.format(dataset) + file + '.txt'
         f = open(path, 'r', encoding='utf-8')
@@ -515,12 +547,21 @@ def find_entity_pair(dataset):
             if dst2 in id_entity_map:
                 if id_entity_map[dst2] not in attr_dict:
                     continue
+                if src not in record_cnt_map:
+                    record_cnt_map[src] = entity_cnt
+                    entity_cnt += 1
                 if dst2 not in record_cnt_map:
                     record_cnt_map[dst2] = entity_cnt
                     entity_cnt += 1
                 src_dst_pair = (src, dst2)
                 if src_dst_pair not in src_dst_deduplication_test:
                     src_dst_deduplication_test.add(src_dst_pair)
+                    # DEBUG
+                    # with open('record_cnt_map.txt','w') as file:
+                    #     for key,value in record_cnt_map.items():
+                    #         file.write(f"{key}: {value}\n")
+                    # print(record_cnt_map[src])
+                    # DEBUG
                     entity_pair = str(record_cnt_map[uuid]) + '\t' + str(record_cnt_map[src]) + '\t' + str(
                         record_cnt_map[dst2]) + '\t' + str(time)
                     entity_pairs.append(entity_pair)
@@ -561,7 +602,7 @@ def find_entity_pair(dataset):
 
 
 def ip_to_binary_list(ip):
-    if ip == 'localhost':
+    if ip == 'localhost' or 'NETLINK':
         ip = '127.0.0.1'  # 针对freebsd
     if pd.isna(ip):
         return torch.zeros(128, dtype=torch.int32)
@@ -595,8 +636,73 @@ def one_hot_encode(df, column_name, max_dim=32):
         encoded = encoded[:, :max_dim]
     print(f"{column_name} is ready")
     return encoded
+def float_to_binary(pos, bits=118):
+    """将 0~1 的浮点数转为二进制向量"""
+    binary = []
+    for _ in range(bits):
+        pos *= 2
+        bit = int(pos)
+        binary.append(1 if bit > 0 else 0)
+        pos -= bit
+    return binary
 
 
+
+def uuid_to_binary_vector(uuid_str):
+    """将UUID转换为128维二进制向量"""
+    hex_str = uuid_str.replace('-', '').lower()
+    binary_str = ''.join([format(int(c, 16), '04b') for c in hex_str])
+    return [float(bit) for bit in binary_str]  # 转为浮点列表
+
+
+
+
+def encode_cid(df, max_cid=4000, bin_width=400, pos_bits=118):
+    # 分箱参数
+    num_bins = max_cid // bin_width
+    bins = list(range(0, max_cid + bin_width, bin_width))
+    labels = [f"bin_{i}" for i in range(num_bins)]
+
+    # 分箱操作
+    df["cid_bin"] = pd.cut(df["cid"], bins=bins, labels=labels, right=False, include_lowest=True)
+
+    # One-Hot 编码
+    one_hot = pd.get_dummies(df["cid_bin"].astype(str), prefix="cid")
+    one_hot = one_hot.astype(int)  # 确保数据类型是 int
+
+    # 计算相对位置
+    df["bin_start"] = df["cid_bin"].map(lambda x: bins[labels.index(x)] if pd.notna(x) else 0).astype(int)
+    df["relative_pos"] = (df["cid"] - df["bin_start"]) / bin_width
+
+    # 位置编码函数
+    def float_to_binary(pos):
+        binary = []
+        for _ in range(pos_bits):
+            pos *= 2
+            bit = int(pos)
+            binary.append(bit)
+            pos -= bit
+        return binary
+
+    # 生成位置编码
+    pos_df = pd.DataFrame(df["relative_pos"].map(float_to_binary).tolist(), columns=[f"pos_{i}" for i in range(pos_bits)])
+
+    # 确保 one_hot 和 pos_df 维度匹配
+    missing_cols = [f"cid_bin_{i}" for i in range(num_bins) if f"cid_bin_{i}" not in one_hot.columns]
+    for col in missing_cols:
+        one_hot[col] = 0
+    one_hot = one_hot[[f"cid_bin_{i}" for i in range(num_bins)]]
+
+    # 合并编码
+    combined = pd.concat([one_hot, pos_df], axis=1)
+
+    # 替换原始 cid
+    df["cid"] = combined.values.tolist()
+
+    # 清理中间列
+    df.drop(["cid_bin", "bin_start", "relative_pos"], axis=1, inplace=True)
+
+    return df
 def get_cnt(df, attr_type):
     if attr_type in ['remote_address', 'memory_address', 'local_address']:
         df[attr_type] = df[attr_type].apply(ip_to_binary_list)
@@ -616,10 +722,13 @@ def get_cnt(df, attr_type):
     elif attr_type == 'event_type':
         df['event_type'] = pd.Categorical(df['event_type']).codes
         df[attr_type] = list(one_hot_encode(df, attr_type))
+        return df    
+    # 83C8ED1F-5045-DBCD-B39F-918F0DF4F851这样的uuid进行编码 8-4-4-4-12
+    elif attr_type == 'local_principal':
+        df[attr_type] = df[attr_type].apply(lambda x: uuid_to_binary_vector(x))
         return df
-    elif attr_type == 'permission':
-        df['permission'] = pd.Categorical(df['permission']).codes
-        df[attr_type] = list(one_hot_encode(df, attr_type))
+    elif attr_type == 'cid':
+        df = encode_cid(df)
         return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
@@ -650,7 +759,24 @@ def get_embedding(df, attr_type):
     else:
         raise NotImplementedError("This type is not included")
 
+def convert_serializable(obj):
+    """递归转换字典/列表中的不可序列化对象为可序列化格式"""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()  # 转换 NumPy 数组
+    elif isinstance(obj, torch.Tensor):
+        return obj.tolist()  # 转换 PyTorch 张量
+    elif isinstance(obj, (set, tuple)):
+        return list(obj)  # 集合和元组转换为列表
+    elif isinstance(obj, bytes):
+        return obj.decode('utf-8', errors='ignore')  # 处理字节数据
+    elif isinstance(obj, dict):
+        return {k: convert_serializable(v) for k, v in obj.items()}  # 递归处理字典
+    elif isinstance(obj, list):
+        return [convert_serializable(v) for v in obj]  # 递归处理列表
+    else:
+        return obj  # 其他类型直接返回
 
+# 针对Cadets的数据提取
 def get_attrs(dataset, mode):
     # entity == subject
     uuid_to_node_attrs = {}
@@ -658,26 +784,31 @@ def get_attrs(dataset, mode):
     if os.path.exists('./dataset/{}/attr_subject.txt'.format(dataset)):
         with open('./dataset/{}/attr_subject.txt'.format(dataset), 'r', encoding='utf-8') as f_sub:
             df = pd.read_csv(f_sub,
-                             sep='\t',
-                             names=['uuid', 'record', 'subject_type', 'parent',
-                                    'local_principal', 'cid', 'start_time',
-                                    'unit_id', 'cmdline'])
+                    sep='\t',
+                    names=['uuid', 'record', 'subject_type', 'parent','local_principal', 'cid', 'start_time','unit_id', 'cmdline'],
+                    usecols=['uuid', 'subject_type','cid','local_principal','cmdline']
+                    )
             df = get_cnt(df, 'subject_type')
             df = get_embedding(df, 'cmdline')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+                        # 新增的细节信息
+            df = get_cnt(df, 'cid')
+            df = get_cnt(df, 'local_principal')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
                              sep='\t',
-                             names=['uuid', 'record', 'file_type', 'epoch',
-                                    'permission', 'path'])
+                             names=['uuid', 'record', 'file_type', 'epoch','permission', 'path'],
+                             usecols=['uuid', 'file_type']
+                             )
             df = get_cnt(df, 'file_type')
-            df = get_cnt(df, 'permission')
-            df = get_embedding(df, 'path')
+            # df = get_embedding(df, 'path')
+            
             # cadets存在重复情况
-            # df_last = df.drop_duplicates(subset='uuid', keep='last')
-            # uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
+            
             # 查找 'uuid' 列中重复的条目
             # df['file_type'] = df['file_type'].apply(lambda x: str(x) if isinstance(x, np.ndarray) else x)
             #
@@ -701,36 +832,33 @@ def get_attrs(dataset, mode):
         with open('./dataset/{}/attr_netflow.txt'.format(dataset), 'r', encoding='utf-8') as f_netflow:
             df = pd.read_csv(f_netflow,
                              sep='\t',
-                             names=['uuid', 'record', 'epoch',
-                                    'local_address',
-                                    'local_port',
-                                    'remote_address',
-                                    'remote_port',
-                                    'ip_protocol'])
+                             names=['uuid', 'record', 'epoch','local_address','local_port','remote_address','remote_port','ip_protocol'],
+                             usecols=['uuid', 'local_address','local_port','remote_address','remote_port']
+                             )
             df = get_cnt(df, 'local_address')
             df = get_cnt(df, 'local_port')
             df = get_cnt(df, 'remote_address')
             df = get_cnt(df, 'remote_port')
-            uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_node_attrs.update(df_last.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_memory.txt'.format(dataset)):
         with open('./dataset/{}/attr_memory.txt'.format(dataset), 'r', encoding='utf-8') as f_mem:
             df = pd.read_csv(f_mem,
                              sep='\t',
-                             names=['uuid', 'record', 'epoch',
-                                    'memory_address',
-                                    'tgid',
-                                    'size'])
+                             names=['uuid', 'record', 'epoch','memory_address','tgid','size'],
+                             usecols=['uuid', 'memory_address']
+                             )
             df = get_cnt(df, 'memory_address')
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
-
     # if os.path.exists('./dataset/{}/attr_unnamed.txt'.format(dataset)):
     #     with open('./dataset/{}/attr_unnamed.txt'.format(dataset), 'r', encoding='utf-8') as f_unnamed:
     #         df = pd.read_csv(f_unnamed,
     #                          sep='\t',
     #                          names=['uuid', 'record', 'epoch', 'pid', 'source_file_descriptor', 'sink_file_descriptor']
     #                          )
-    #         uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
+    #       uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     if os.path.exists('./dataset/{}/attr_event.txt'.format(dataset)):
         with open('./dataset/{}/attr_event.txt'.format(dataset), 'r', encoding='utf-8') as f_event:
@@ -745,9 +873,8 @@ def get_attrs(dataset, mode):
             #     uuid_to_edge_attrs.update(df.set_index(['uuid', 'event_type']).to_dict('index'))
             # else:
             #     uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
-            # df_last = df.drop_duplicates(subset='uuid', keep='last')
-            # uuid_to_edge_attrs.update(df_last.set_index('uuid').to_dict('index'))
-            uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
+            df_last = df.drop_duplicates(subset='uuid', keep='last')
+            uuid_to_edge_attrs.update(df_last.set_index('uuid').to_dict('index'))
     with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
 
@@ -780,8 +907,6 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
     cnt_node = 0
     src_node_cnt = 0
     dst_node_cnt = 0
-    if event_uuid not in uuid_to_edge_attrs:
-        print(event_uuid)
     event_attr = uuid_to_edge_attrs[event_uuid]
     src_attr = uuid_to_node_attrs[src_uuid]
     dst_attr = uuid_to_node_attrs[dst_uuid]
@@ -846,22 +971,22 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
     # 将所有节点的特征相加
     sub_g_embedding = torch.stack(node_embeddings).sum(dim=0)
     # [DEBUG]
-    numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
-    df = pd.DataFrame(numpy_array)
+    # numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
+    # df = pd.DataFrame(numpy_array)
 
-    # 追加到CSV文件
-    csv_file_path = "./sub_g_embedding.csv"
-    df.to_csv(csv_file_path, mode='a', index=False, header=False)
+    # # 追加到CSV文件
+    # csv_file_path = "./sub_g_embedding.csv"
+    # df.to_csv(csv_file_path, mode='a', index=False, header=False)
 
-    # 追加到JSON文件（使用JSON Lines格式）
-    json_file_path = "./sub_g_embedding.json"
-    with open(json_file_path, 'a') as f:
-        # 转换为JSON Lines格式（每行一个JSON对象）
-        json_str = df.to_json(orient='records', lines=True)
-        f.write(json_str)
-        # 确保每条记录换行
-        if not json_str.endswith('\n'):
-            f.write('\n')
+    # # 追加到JSON文件（使用JSON Lines格式）
+    # json_file_path = "./sub_g_embedding.json"
+    # with open(json_file_path, 'a') as f:
+    #     # 转换为JSON Lines格式（每行一个JSON对象）
+    #     json_str = df.to_json(orient='records', lines=True)
+    #     f.write(json_str)
+    #     # 确保每条记录换行
+    #     if not json_str.endswith('\n'):
+    #         f.write('\n')
     # [DEBUG]
     return sub_g_embedding
     # fixed_dim = 128
@@ -1037,6 +1162,10 @@ def graph_node_construction(dataset, mode):
             uuid_to_node_attrs, uuid_to_edge_attrs = pkl.load(f)
     else:
         raise NotImplementedError("There is not pkl file")
+    # DEBUG
+    # print(f"Available keys: {list(uuid_to_node_attrs.keys())[:10]}")
+    # assert(1==0)
+    # DEBUG
     id_entity_map, cnt_record_map = get_maps(dataset)
     sub_g_embedding_construction(dataset, uuid_to_node_attrs, uuid_to_edge_attrs, id_entity_map, cnt_record_map, mode)
     print("g_nodes_list is ready")
@@ -1050,9 +1179,35 @@ def graph_edge_construction_with_memory(dataset, mode):
     print(f"当前内存使用: {current / 1024 / 1024:.2f} MB")
     print(f"峰值内存使用: {peak / 1024 / 1024:.2f} MB")
 
+def clean_env(dataset):
+    dataset_dir = "./dataset/{}".format(dataset)
+    for item in os.listdir(dataset_dir):
+        item_path = os.path.join(dataset_dir, item)
+        if os.path.isfile(item_path):
+            os.remove(item_path)
+            print(f"已删除文件: {item_path}")
+        elif os.path.isdir(item_path):
+            print(f"保留子文件夹: {item_path}")
+    dataset_dir = "./dataset/{}/train".format(dataset)
+    for item in os.listdir(dataset_dir):
+        item_path = os.path.join(dataset_dir, item)
+        if os.path.isfile(item_path):
+            os.remove(item_path)
+            print(f"已删除文件: {item_path}")
+        elif os.path.isdir(item_path):
+            print(f"保留子文件夹: {item_path}")
+    dataset_dir = "./dataset/{}/test".format(dataset)
+    for item in os.listdir(dataset_dir):
+        item_path = os.path.join(dataset_dir, item)
+        if os.path.isfile(item_path):
+            os.remove(item_path)
+            print(f"已删除文件: {item_path}")
+        elif os.path.isdir(item_path):
+            print(f"保留子文件夹: {item_path}")
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Parser')
-    parser.add_argument("--dataset", type=str, default="trace")
+    parser.add_argument("--dataset", type=str, default="theia")
     parser.add_argument("--mode", type=str, default="train")
     args = parser.parse_args()
     dataset = args.dataset
@@ -1061,15 +1216,16 @@ if __name__ == '__main__':
         raise NotImplementedError("This dataset is not included")
     # 先执行preprocess_entity_attr、preprocess、find_entity_pair、get_attrs
     # 然后训练测试模块各执行一次node和edge构建
+    # clean_env(dataset)
+    # get_uuid_path_map(dataset)
     # preprocess_entity_attr(dataset)
-    # # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
     # get_attrs(dataset,mode)
-    # # # =================
-    # graph_node_construction(dataset,"train" )
-    # graph_edge_construction(dataset, "train")
-    # graph_edge_construction_with_memory(dataset, "train")
+    # # # # =================
+    graph_node_construction(dataset,"train" )
+    graph_edge_construction(dataset, "train")
+    # # graph_edge_construction_with_memory(dataset, "train")
     graph_node_construction(dataset, "test")
     graph_edge_construction(dataset, "test")
     # graph_edge_construction_with_memory(dataset, "test")
