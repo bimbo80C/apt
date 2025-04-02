@@ -621,6 +621,36 @@ def get_cnt(df, attr_type):
         df['permission'] = pd.Categorical(df['permission']).codes
         df[attr_type] = list(one_hot_encode(df, attr_type))
         return df
+    elif attr_type in ['cid','tgid']:
+        n_bins = 128  # 设定桶数
+        min_val, max_val = df[attr_type].min(), df[attr_type].max()
+        bins = np.linspace(min_val, max_val, n_bins + 1)
+        binned = pd.cut(df[attr_type], bins=bins, labels=range(n_bins), include_lowest=True)
+        df[attr_type] = pd.get_dummies(binned).values.tolist()
+        return df
+    # elif attr_type in ['tgid', 'parent', 'thread_id']:
+    #     if df[attr_type].isnull().all():
+    #         df[attr_type] = np.zeros((len(df), 64)).tolist()
+    #     else:
+    #         filled_series = df[attr_type].fillna(0).astype(int)
+    #         n_bins = 10
+    #         if filled_series.nunique() <= 1:
+    #             binned = pd.Series([0] * len(filled_series))
+    #         else:
+    #             min_val = filled_series.min()
+    #             max_val = filled_series.max()
+    #             if min_val == max_val:
+    #                 max_val += 1
+    #             bins = np.linspace(min_val, max_val, n_bins+1)
+    #             binned = pd.cut(filled_series,
+    #                         bins=bins,
+    #                         labels=range(n_bins),
+    #                         include_lowest=True)
+    #             binned = binned.cat.add_categories(-1).fillna(-1)
+    #         df[attr_type] = binned.astype(str)
+    #         encoded = one_hot_encode(df, attr_type, max_dim=64)
+    #         df[attr_type] = encoded.tolist()
+    #     return df
     else:
         raise NotImplementedError(f"This attribute type '{attr_type}' is not implemented yet.")
 
@@ -650,6 +680,22 @@ def get_embedding(df, attr_type):
     else:
         raise NotImplementedError("This type is not included")
 
+def convert_serializable(obj):
+    """递归转换字典/列表中的不可序列化对象为可序列化格式"""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()  # 转换 NumPy 数组
+    elif isinstance(obj, torch.Tensor):
+        return obj.tolist()  # 转换 PyTorch 张量
+    elif isinstance(obj, (set, tuple)):
+        return list(obj)  # 集合和元组转换为列表
+    elif isinstance(obj, bytes):
+        return obj.decode('utf-8', errors='ignore')  # 处理字节数据
+    elif isinstance(obj, dict):
+        return {k: convert_serializable(v) for k, v in obj.items()}  # 递归处理字典
+    elif isinstance(obj, list):
+        return [convert_serializable(v) for v in obj]  # 递归处理列表
+    else:
+        return obj  # 其他类型直接返回
 
 def get_attrs(dataset, mode):
     # entity == subject
@@ -661,16 +707,18 @@ def get_attrs(dataset, mode):
                              sep='\t',
                              names=['uuid', 'record', 'subject_type', 'parent',
                                     'local_principal', 'cid', 'start_time',
-                                    'unit_id', 'cmdline'])
+                                    'unit_id', 'cmdline'],
+                             usecols = ['uuid', 'subject_type', 'local_principal','cid','cmdline'])
             df = get_cnt(df, 'subject_type')
+            df = get_cnt(df, 'cid')
             df = get_embedding(df, 'cmdline')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
     if os.path.exists('./dataset/{}/attr_file.txt'.format(dataset)):
         with open('./dataset/{}/attr_file.txt'.format(dataset), 'r', encoding='utf-8') as f_file:
             df = pd.read_csv(f_file,
                              sep='\t',
-                             names=['uuid', 'record', 'file_type', 'epoch',
-                                    'permission', 'path'])
+                             names=['uuid', 'record', 'file_type', 'epoch','permission', 'path'],
+                             usecols = ['uuid', 'file_type','permission', 'path'])
             df = get_cnt(df, 'file_type')
             df = get_cnt(df, 'permission')
             df = get_embedding(df, 'path')
@@ -706,7 +754,13 @@ def get_attrs(dataset, mode):
                                     'local_port',
                                     'remote_address',
                                     'remote_port',
-                                    'ip_protocol'])
+                                    'ip_protocol'],
+                            usecols = ['uuid',
+                                     'local_address',
+                                     'local_port',
+                                     'remote_address',
+                                     'remote_port',
+                                     'ip_protocol'])
             df = get_cnt(df, 'local_address')
             df = get_cnt(df, 'local_port')
             df = get_cnt(df, 'remote_address')
@@ -720,8 +774,10 @@ def get_attrs(dataset, mode):
                              names=['uuid', 'record', 'epoch',
                                     'memory_address',
                                     'tgid',
-                                    'size'])
+                                    'size'],
+                            usecols = ['uuid','memory_address','tgid'])
             df = get_cnt(df, 'memory_address')
+            df = get_cnt(df,'tgid')
             uuid_to_node_attrs.update(df.set_index('uuid').to_dict('index'))
 
     # if os.path.exists('./dataset/{}/attr_unnamed.txt'.format(dataset)):
@@ -738,7 +794,7 @@ def get_attrs(dataset, mode):
                              sep='\t',
                              names=['uuid', 'record', 'event_type', 'src', 'dst1', 'dst2', 'time'],
                              dtype={'size': 'float'},
-                             usecols=['uuid', 'record', 'event_type', 'time']
+                             usecols=['uuid', 'event_type', 'time']
                              )
             df = get_cnt(df, 'event_type')
             # if dataset == 'cadets':
@@ -750,6 +806,12 @@ def get_attrs(dataset, mode):
             uuid_to_edge_attrs.update(df.set_index('uuid').to_dict('index'))
     with open('./dataset/{}/uuid_to_attrs.pkl'.format(dataset), 'wb') as f:
         pkl.dump((uuid_to_node_attrs, uuid_to_edge_attrs), f)
+    # uuid_to_node_attrs_serializable = convert_serializable(uuid_to_node_attrs)
+    # with open('./dataset/{}/uuid_to_attrs.json'.format(dataset), 'w') as f:
+    #     json.dump(uuid_to_node_attrs_serializable, f)
+
+
+
 
 
 def get_maps(dataset):
@@ -764,17 +826,21 @@ def get_maps(dataset):
             cnt_record_map = json.load(f_cnt_record_map)
     return id_entity_map, cnt_record_map
 
-
 def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs, uuid_to_edge_attrs):
     sub_g = nx.DiGraph()
     key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address',
                      'event_type']  # 对应subject,file,netflow,memory,event核心信息
-    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port','permission']
-    # detail_attr_dict = []
-    # detail_attr_dict = ['permission']
-    # detail_attr_dict = ['permission','tgid','parent','cid']
-    # key_attr_dict = ['subject_type', 'path', 'remote_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
-    # detail_attr_dict = ['cmdline', 'file_type']
+    # key_attr_dict = []  # 对应subject,file,netflow,memory,event核心信息
+    detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    # essential attr, contexual attr, supplementary attr
+    # E==========
+    # key_attr_dict = ['subject_type', 'path', 'remote_address', 'memory_address','event_type']  # 对应subject,file,netflow,memory,event核心信息
+    # detail_attr_dict=[]
+    # C==========
+    # detail_attr_dict = ['cmdline', 'file_type', 'local_address', 'local_port', 'remote_port']
+    # S==========
+    # detail_attr_dict = ['permission','tgid','cid']
+
     # subject_type 直接编号 remote_address 映射成0-2^32-1 memory_address 0-2^48-1 event_type 直接编号
     #  cmdline doc2vec file_type 直接编号 local_address映射成0-2^32-1 local_port、remote_port、ip_protocol
     cnt_node = 0
@@ -801,7 +867,7 @@ def single_sub_g_construction(src_uuid, dst_uuid, event_uuid, uuid_to_node_attrs
             sub_g_nodes_list.append((cnt_node, {"type": attr_value}))
             dst_node_cnt = cnt_node
             cnt_node += 1
-    # key edge
+    # key edge 这里本实验中没有更多的操作，但是其实这样写给这个上下文、补充属性和主要属性之间是否存在结构关系留下了操作空间
     for attr_name, attr_value in event_attr.items():
         if attr_name in key_attr_dict:
             sub_g_edges_list.append((src_node_cnt, dst_node_cnt, {"type": attr_value}))
@@ -845,24 +911,24 @@ def sub_g_embedding_aggregation(sub_g, max_dim=128):
             node_embeddings.append(torch.tensor(attr_value))
     # 将所有节点的特征相加
     sub_g_embedding = torch.stack(node_embeddings).sum(dim=0)
-    # [DEBUG]
-    numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
-    df = pd.DataFrame(numpy_array)
-
-    # 追加到CSV文件
-    csv_file_path = "./sub_g_embedding.csv"
-    df.to_csv(csv_file_path, mode='a', index=False, header=False)
-
-    # 追加到JSON文件（使用JSON Lines格式）
-    json_file_path = "./sub_g_embedding.json"
-    with open(json_file_path, 'a') as f:
-        # 转换为JSON Lines格式（每行一个JSON对象）
-        json_str = df.to_json(orient='records', lines=True)
-        f.write(json_str)
-        # 确保每条记录换行
-        if not json_str.endswith('\n'):
-            f.write('\n')
-    # [DEBUG]
+    # # [DEBUG]
+    # numpy_array = sub_g_embedding.detach().cpu().numpy().reshape(1, -1)  # 强制转换为二维（1行N列）
+    # df = pd.DataFrame(numpy_array)
+    #
+    # # 追加到CSV文件
+    # csv_file_path = "./sub_g_embedding.csv"
+    # df.to_csv(csv_file_path, mode='a', index=False, header=False)
+    #
+    # # 追加到JSON文件（使用JSON Lines格式）
+    # json_file_path = "./sub_g_embedding.json"
+    # with open(json_file_path, 'a') as f:
+    #     # 转换为JSON Lines格式（每行一个JSON对象）
+    #     json_str = df.to_json(orient='records', lines=True)
+    #     f.write(json_str)
+    #     # 确保每条记录换行
+    #     if not json_str.endswith('\n'):
+    #         f.write('\n')
+    # # [DEBUG]
     return sub_g_embedding
     # fixed_dim = 128
     # class WeightLearner(nn.Module):
@@ -1002,7 +1068,7 @@ def graph_edge_construction(dataset, mode):
                 hash_src = hash(src)
                 map_a[hash_dst].append(cnt)
                 map_b[hash_src].append(cnt)
-            alpha = 130 #list中元素个数比这个小的,也就是能完全采样的。占到10%-90%
+            alpha = 149 #list中元素个数比这个小的,也就是能完全采样的。占到10%-90%
             for hash_dst in tqdm(map_a, total=len(map_a)):
                 if hash_dst in map_b:
                     cnt_list_a = map_a[hash_dst]
@@ -1065,11 +1131,11 @@ if __name__ == '__main__':
     # # malicious_type(dataset)
     # preprocess(dataset) # 这里mode划分数据集
     # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
-    # get_attrs(dataset,mode)
+    get_attrs(dataset,mode)
     # # # =================
     # graph_node_construction(dataset,"train" )
     # graph_edge_construction(dataset, "train")
-    # graph_edge_construction_with_memory(dataset, "train")
     graph_node_construction(dataset, "test")
     graph_edge_construction(dataset, "test")
+    # 统计推理过程中边构建的开销
     # graph_edge_construction_with_memory(dataset, "test")

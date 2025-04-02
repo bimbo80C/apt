@@ -265,18 +265,51 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import Counter
+
+# 读取文件并统计第5列数据
+
 if __name__ == "__main__":
+    file_path = './dataset/trace/attr_subject.txt'
+
+    data_list = []
+    with open(file_path, "r", encoding="utf-8") as file:
+        for line in file:
+            parts = line.strip().split("\t")  # 按Tab分割
+            if len(parts) >= 6:  # 确保至少有5列
+                try:
+                    value = int(parts[5])  # 第5列转换为整数
+                    data_list.append(value)
+                except ValueError:
+                    pass  # 忽略无法转换的非数值行
+
+    # 计算数据范围
+    min_value = min(data_list)
+    max_value = max(data_list)
+
+    # 统计数据频率
+    counter = Counter(data_list)
+
+    # 数据种类（唯一值个数）
+    unique_values = len(counter)
+
+    # 输出结果
+    print(f"第5列数据范围：{min_value} - {max_value}")
+    print(f"数据种类数量：{unique_values}")
+    print("前10个数据频率：")
+    for value, freq in counter.most_common(10):  # 显示出现次数最多的前10个
+        print(f"值 {value} 出现 {freq} 次")
     # 读取数据，假设数据是 tab 分隔的，文件名为 'data.txt'
-    df = pd.read_csv('statistics(1).txt', sep='\t', header=None)
-
-    # 提取第三列数据
-    third_column = df[2]
-    percentiles = [i / 10000 for i in range(9990, 9999)]  # 99.90%到99.99%每隔0.01%
-    values_at_percentiles = third_column.quantile(percentiles)
-
-    # 打印结果
-    for percentile, value in zip(percentiles, values_at_percentiles):
-        print(f"{percentile * 100}%: {value}")
+    # df = pd.read_csv('statistics(1).txt', sep='\t', header=None)
+    #
+    # # 提取第三列数据
+    # third_column = df[2]
+    # percentiles = [i / 10000 for i in range(9990, 9999)]  # 99.90%到99.99%每隔0.01%
+    # values_at_percentiles = third_column.quantile(percentiles)
+    #
+    # # 打印结果
+    # for percentile, value in zip(percentiles, values_at_percentiles):
+    #     print(f"{percentile * 100}%: {value}")
 
     # # 计算最大1%区间的数据
     # percentile_99 = third_column.quantile(0.9999)

@@ -6,7 +6,6 @@ import torch
 from tqdm import tqdm
 import os
 
-
 import pickle as pkl
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
@@ -25,6 +24,7 @@ if __name__ == '__main__':
     in_dim = 128
     hidden_dim = 64
     num_layers = 2
+    # model =SAGENet(in_dim, hidden_dim, num_layers)
     model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
