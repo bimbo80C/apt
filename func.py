@@ -1216,12 +1216,12 @@ if __name__ == '__main__':
         raise NotImplementedError("This dataset is not included")
     # 先执行preprocess_entity_attr、preprocess、find_entity_pair、get_attrs
     # 然后训练测试模块各执行一次node和edge构建
-    # clean_env(dataset)
-    # get_uuid_path_map(dataset)
-    # preprocess_entity_attr(dataset)
-    # preprocess(dataset) # 这里mode划分数据集
-    # find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
-    # get_attrs(dataset,mode)
+    clean_env(dataset)
+    get_uuid_path_map(dataset)
+    preprocess_entity_attr(dataset)
+    preprocess(dataset) # 这里mode划分数据集
+    find_entity_pair(dataset) # 这里mode决定数据集中是否包含恶意节点
+    get_attrs(dataset,mode)
     # # # # =================
     graph_node_construction(dataset,"train" )
     graph_edge_construction(dataset, "train")

@@ -9,13 +9,55 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from model import GCNModel
 import argparse
-from loaddata import load_darpa_dataset
+from loaddata import load_darpa_dataset,load_batch_level_dataset,transform_graph
 from sklearn.manifold import TSNE
 import torch.nn.functional as F
+import dgl
+import torch.nn as nn
 IN_DIM = 128
 HIDDEN_DIM = 64
+NUM_LAYERS = 2
 
+class Pooling(nn.Module):
+    def __init__(self, pooler):
+        super(Pooling, self).__init__()
+        self.pooler = pooler
 
+    def forward(self, graph, feat, t=None):
+        feat = feat
+        # Implement node type-specific pooling
+        with graph.local_scope():
+            if t is None:
+                if self.pooler == 'mean':
+                    return feat.mean(0, keepdim=True)
+                elif self.pooler == 'sum':
+                    return feat.sum(0, keepdim=True)
+                elif self.pooler == 'max':
+                    return feat.max(0, keepdim=True)
+                else:
+                    raise NotImplementedError
+            elif isinstance(t, int):
+                mask = (graph.ndata['attr'] ==t)
+                if self.pooler == 'mean': 
+                    return feat[mask].mean(0, keepdim=True)
+                elif self.pooler == 'sum':
+                    return feat[mask].sum(0, keepdim=True)
+                elif self.pooler == 'max':
+                    return feat[mask].max(0, keepdim=True)
+                else:
+                    raise NotImplementedError
+            else:
+                mask = (graph.ndata['attr'] == t[0])
+                for i in range(1, len(t)):
+                    mask |= (graph.ndata['attr'] == t[i])
+                if self.pooler == 'mean':
+                    return feat[mask].mean(0, keepdim=True)
+                elif self.pooler == 'sum':
+                    return feat[mask].sum(0, keepdim=True)
+                elif self.pooler == 'max':
+                    return feat[mask].max(0, keepdim=True)
+                else:
+                    raise NotImplementedError
 def save_seed(seed, filename='random_seed.pkl'):
     with open(filename, 'wb') as f:
         pkl.dump(seed, f)
@@ -28,6 +70,65 @@ def set_random_seed(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.determinstic = True
 
+def evaluate_batch_level_using_knn(dataset, embeddings, labels):
+    x, y = embeddings, labels
+    if dataset == 'streamspot':
+        train_count = 400
+    else:
+        train_count = 100
+    n_neighbors = min(int(train_count * 0.02), 10)
+    benign_idx = np.where(y == 0)[0]
+    attack_idx = np.where(y == 1)[0]
+    set_random_seed(2022)
+    np.random.shuffle(benign_idx)
+    np.random.shuffle(attack_idx)
+    x_train = x[benign_idx[:train_count]]
+    x_test = np.concatenate([x[benign_idx[train_count:]], x[attack_idx]], axis=0)
+    y_test = np.concatenate([y[benign_idx[train_count:]], y[attack_idx]], axis=0)
+    x_train_mean = x_train.mean(axis=0)
+    x_train_std = x_train.std(axis=0)
+    epsilon = 1e-8 
+    print(f"x_train_mean: {x_train_mean}")
+    print(f"x_train_std: {x_train_std}")
+    x_train_std[x_train_std == 0] = epsilon
+    x_train = (x_train - x_train_mean) / x_train_std
+    x_test = (x_test - x_train_mean) / x_train_std
+
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors)
+    nbrs.fit(x_train)
+    distances, indexes = nbrs.kneighbors(x_train, n_neighbors=n_neighbors)
+    mean_distance = distances.mean() * n_neighbors / (n_neighbors - 1)
+    distances, indexes = nbrs.kneighbors(x_test, n_neighbors=n_neighbors)
+
+    score = distances.mean(axis=1) / mean_distance
+    auc = roc_auc_score(y_test, score)
+    prec, rec, threshold = precision_recall_curve(y_test, score)
+    f1 = 2 * prec * rec / (rec + prec + 1e-9)
+    best_idx = np.argmax(f1)
+    best_thres = threshold[best_idx]
+
+    tn = 0
+    fn = 0
+    tp = 0
+    fp = 0
+    for i in range(len(y_test)):
+        if y_test[i] == 1.0 and score[i] >= best_thres:
+            tp += 1
+        if y_test[i] == 1.0 and score[i] < best_thres:
+            fn += 1
+        if y_test[i] == 0.0 and score[i] < best_thres:
+            tn += 1
+        if y_test[i] == 0.0 and score[i] >= best_thres:
+            fp += 1
+    print('AUC: {}'.format(auc))
+    print('F1: {}'.format(f1[best_idx]))
+    print('PRECISION: {}'.format(prec[best_idx]))
+    print('RECALL: {}'.format(rec[best_idx]))
+    print('TN: {}'.format(tn))
+    print('FN: {}'.format(fn))
+    print('TP: {}'.format(tp))
+    print('FP: {}'.format(fp))
+    return auc, 0.0
 
 
 def evaluate_using_knn(dataset, x_train, x_test, y_test):
@@ -52,10 +153,10 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
         file.write("x_test:\n")
         file.write(np.array2string(x_test, precision=4, separator=',') + "\n")
 
-    if dataset == 'cadets':
-        n_neighbors = 20
-    else:
-        n_neighbors = 10
+    # if dataset == 'cadets':
+    #     n_neighbors = 20
+    # else:
+    n_neighbors = 10
 
     nbrs = NearestNeighbors(n_neighbors=n_neighbors, n_jobs=-1)
     nbrs.fit(x_train)  # 使用训练数据 x_train 拟合 K 近邻模型
@@ -135,96 +236,116 @@ def evaluate_using_knn(dataset, x_train, x_test, y_test):
     print('FP: {}'.format(fp))
     return auc, 0.0, None, None
 
+def batch_level_evaluation(model, pooler, device, method, dataset):
+    model.eval()
+    x_list = []
+    y_list = []
+    data = load_batch_level_dataset()
+    full = data['full_index']
+    graphs = data['graph']
+    with torch.no_grad():
+        for i in full:
+            g = graphs[i][0].to(device)
+            g = dgl.add_self_loop(g)
+            label = graphs[i][1]
+            out = model.embed(g)
+            # out = pooler(g, out, [2]).cpu().numpy()
+            out = out.cpu().numpy()
+            y_list.append(label)
+            x_list.append(out)
+    x = np.concatenate(x_list, axis=0)
+    y = np.array(y_list)
+    if 'knn' in method:
+        test_auc, test_std = evaluate_batch_level_using_knn(dataset, x, y)
+    else:
+        raise NotImplementedError
+    return test_auc, test_std
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Darpa TC E3 Train')
-    parser.add_argument("--dataset", type=str, default="theia")
+    parser.add_argument("--dataset", type=str, default="wget")
     args = parser.parse_args()
     dataset = args.dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device is {}".format(device))
     set_random_seed(0)
-    in_dim = IN_DIM
-    hidden_dim = HIDDEN_DIM
-    num_layers = 2
-    # Ours
-    model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
-    # Threatrace
-    # model = SAGENet(in_dim, hidden_dim)
-    # MAGIC
-    # model = GMAEModel(
-    #     n_dim= in_dim,  
-    #     hidden_dim= hidden_dim,
-    #     n_layers= num_layers,
-    #     n_heads=4,
-    #     activation=F.relu,
-    #     feat_drop=0.1,
-    #     negative_slope=0.2,
-    #     residual=True,
-    #     mask_rate=0.5,
-    #     loss_fn='sce',
-    #     alpha_l=1.3
-    # )
-    model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
-    model = model.to(device)
-    model.eval()
-    malicious_list = []
-    if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
-        with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
-            malicious_list = pkl.load(f)
-    with torch.no_grad():
-        whole_g = load_darpa_dataset(dataset)
-        x_train = []
-        for i in range(len(whole_g)):
-            g= whole_g[i].to(device)
-            x_train.append(model.embed(g).cpu().numpy())
-            del g
-        x_train = np.concatenate(x_train, axis=0)
-        print('trained embed is loaded')
-        skip_benign = 0
-        whole_g = load_darpa_dataset(dataset, mode='test')
-        x_test = []
-        for i in range(len(whole_g)):
-            g= whole_g[i].to(device)
-            if i != len(whole_g) - 1: 
-                skip_benign += g.number_of_nodes()
-            x_test.append(model.embed(g).cpu().numpy())
-        x_test = np.concatenate(x_test, axis=0)
-        print('embed for test is loaded')
-        tsne = TSNE(n_components=2, random_state=42)
-        # 合并训练集和测试集以确保降维时不会出现信息丢失
-        num_samples = 3000  
-        indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
-        indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
-        x_train_sampled = x_train[indices_train]
-        x_test_sampled = x_test[indices_test]
-        # 使用 t-SNE 对训练集和测试集的特征进行降维
-        x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
-        x_all_embedded = tsne.fit_transform(x_all_sampled)
-        # 将降维后的结果分开成训练集和测试集
-        x_train_embedded = x_all_embedded[:num_samples]
-        x_test_embedded = x_all_embedded[num_samples:]
-        # 绘制 2D 散点图
-        plt.figure(figsize=(8, 6))
-        # 绘制训练集的散点图，使用不同颜色表示不同数据
-        plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
-        # 绘制测试集的散点图
-        plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
-        # 设置图例
-        plt.legend()
-        # 设置标题
-        plt.title("t-SNE Visualization of Train and Test Embeddings")
-        # 保存图形
-        plt.savefig("t_sne_plot.png", dpi=300, bbox_inches='tight')
-        n = x_test.shape[0]  # 测试集样本数量
-        y_test = np.zeros(n)  # 测试集标签
-        y_test[malicious_list] = 1.0
-        # Exclude training samples from the test set
-        test_idx = []
-        for i in range(x_test.shape[0]):
-            if i >= skip_benign or y_test[i] == 1.0:
-                test_idx.append(i)
-        result_x_test = x_test[test_idx]
-        result_y_test = y_test[test_idx]
-        del x_test, y_test
-        test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test, result_y_test)
-    print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")
+    if dataset == 'wget':
+        hidden_dim = 256
+        num_layers = 4
+        whole_data = load_batch_level_dataset()
+        n_node_feat = whole_data['n_feat']
+        model = GCNModel(n_node_feat, hidden_dim, num_layers)
+        model = model.to(device)
+        model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
+        pooler = Pooling('mean')
+        test_auc, test_std = batch_level_evaluation(model, pooler, device, ['knn'], args.dataset)
+    else:
+        in_dim = IN_DIM
+        hidden_dim = HIDDEN_DIM
+        num_layers = NUM_LAYERS
+        model = GCNModel(in_dim, hidden_dim, num_layers)  # build_model
+        model.load_state_dict(torch.load("./checkpoints/checkpoint-{}.pt".format(dataset), map_location=device))
+        model = model.to(device)
+        model.eval()
+        malicious_list = []
+        if os.path.exists('./dataset/{}/test/malicious.pkl'.format(dataset).format(dataset, )):
+            with open('./dataset/{}/test/malicious.pkl'.format(dataset), 'rb') as f:
+                malicious_list = pkl.load(f)
+        with torch.no_grad():
+            whole_g = load_darpa_dataset(dataset)
+            x_train = []
+            for i in range(len(whole_g)):
+                g= whole_g[i].to(device)
+                x_train.append(model.embed(g).cpu().numpy())
+                del g
+            x_train = np.concatenate(x_train, axis=0)
+            print('trained embed is loaded')
+            skip_benign = 0
+            whole_g = load_darpa_dataset(dataset, mode='test')
+            x_test = []
+            for i in range(len(whole_g)):
+                g= whole_g[i].to(device)
+                if i != len(whole_g) - 1: 
+                    skip_benign += g.number_of_nodes()
+                x_test.append(model.embed(g).cpu().numpy())
+            x_test = np.concatenate(x_test, axis=0)
+            print('embed for test is loaded')
+            tsne = TSNE(n_components=2, random_state=42)
+            # 合并训练集和测试集以确保降维时不会出现信息丢失
+            num_samples = 3000  
+            indices_train = np.random.choice(x_train.shape[0], size=num_samples, replace=False)
+            indices_test = np.array(malicious_list)  # 假设 malicious_list 是恶意节点的索引列表
+            x_train_sampled = x_train[indices_train]
+            x_test_sampled = x_test[indices_test]
+            # 使用 t-SNE 对训练集和测试集的特征进行降维
+            x_all_sampled = np.vstack([x_train_sampled, x_test_sampled])
+            x_all_embedded = tsne.fit_transform(x_all_sampled)
+            # 将降维后的结果分开成训练集和测试集
+            x_train_embedded = x_all_embedded[:num_samples]
+            x_test_embedded = x_all_embedded[num_samples:]
+            # 绘制 2D 散点图
+            plt.figure(figsize=(8, 6))
+            # 绘制训练集的散点图，使用不同颜色表示不同数据
+            plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+            # 绘制测试集的散点图
+            plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+            # 设置图例
+            plt.legend()
+            # 设置标题
+            plt.title("t-SNE Visualization of Train and Test Embeddings")
+            # 保存图形
+            plt.savefig("t_sne_plot.png", dpi=300, bbox_inches='tight')
+            n = x_test.shape[0]  # 测试集样本数量
+            y_test = np.zeros(n)  # 测试集标签
+            y_test[malicious_list] = 1.0
+            # Exclude training samples from the test set
+            test_idx = []
+            for i in range(x_test.shape[0]):
+                if i >= skip_benign or y_test[i] == 1.0:
+                    test_idx.append(i)
+            result_x_test = x_test[test_idx]
+            result_y_test = y_test[test_idx]
+            del x_test, y_test
+            test_auc, test_std, _, _ = evaluate_using_knn(dataset, x_train, result_x_test, result_y_test)
+            print(f"#Test_AUC: {test_auc:.4f}±{test_std:.4f}")
