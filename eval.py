@@ -17,7 +17,7 @@ import torch.nn as nn
 IN_DIM = 128
 HIDDEN_DIM = 64
 NUM_LAYERS = 2
-
+from sklearn.decomposition import PCA
 class Pooling(nn.Module):
     def __init__(self, pooler):
         super(Pooling, self).__init__()
@@ -72,14 +72,29 @@ def set_random_seed(seed):
 
 def evaluate_batch_level_using_knn(dataset, embeddings, labels):
     x, y = embeddings, labels
+    # pca = PCA(n_components=64)
+    # x = pca.fit_transform(x)
+    # tsne = TSNE(n_components=2, random_state=42)
+    # x_all_embedded = tsne.fit_transform(x)
+    # num_samples = 125
+    # x_train_embedded = x_all_embedded[:num_samples]
+    # x_test_embedded = x_all_embedded[num_samples:]
+    # plt.figure(figsize=(8, 6))
+    # plt.scatter(x_train_embedded[:, 0], x_train_embedded[:, 1], label='Train', alpha=0.5, c='blue')
+    # plt.scatter(x_test_embedded[:, 0], x_test_embedded[:, 1], label='Test', alpha=0.5, c='red')
+    # plt.legend()
+    # plt.title("t-SNE")
+    # plt.savefig("t_sne_plot_wget.png", dpi=300, bbox_inches='tight')
+
     if dataset == 'streamspot':
         train_count = 400
     else:
         train_count = 100
-    n_neighbors = min(int(train_count * 0.02), 10)
+    # n_neighbors = min(int(train_count * 0.02), 10)
+    n_neighbors = 2
     benign_idx = np.where(y == 0)[0]
     attack_idx = np.where(y == 1)[0]
-    set_random_seed(2022)
+    set_random_seed(2025)
     np.random.shuffle(benign_idx)
     np.random.shuffle(attack_idx)
     x_train = x[benign_idx[:train_count]]
@@ -88,8 +103,8 @@ def evaluate_batch_level_using_knn(dataset, embeddings, labels):
     x_train_mean = x_train.mean(axis=0)
     x_train_std = x_train.std(axis=0)
     epsilon = 1e-8 
-    print(f"x_train_mean: {x_train_mean}")
-    print(f"x_train_std: {x_train_std}")
+    # print(f"x_train_mean: {x_train_mean}")
+    # print(f"x_train_std: {x_train_std}")
     x_train_std[x_train_std == 0] = epsilon
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
@@ -98,12 +113,13 @@ def evaluate_batch_level_using_knn(dataset, embeddings, labels):
     nbrs.fit(x_train)
     distances, indexes = nbrs.kneighbors(x_train, n_neighbors=n_neighbors)
     mean_distance = distances.mean() * n_neighbors / (n_neighbors - 1)
+    # mean_distance = distances.mean() 
     distances, indexes = nbrs.kneighbors(x_test, n_neighbors=n_neighbors)
 
     score = distances.mean(axis=1) / mean_distance
     auc = roc_auc_score(y_test, score)
     prec, rec, threshold = precision_recall_curve(y_test, score)
-    f1 = 2 * prec * rec / (rec + prec + 1e-9)
+    f1 = 2 * prec * rec / (rec + prec)
     best_idx = np.argmax(f1)
     best_thres = threshold[best_idx]
 
@@ -120,6 +136,13 @@ def evaluate_batch_level_using_knn(dataset, embeddings, labels):
             tn += 1
         if y_test[i] == 0.0 and score[i] >= best_thres:
             fp += 1
+    with open('outputrec.txt', 'w') as f_rec:
+        for p in rec:
+            f_rec.write(f'{p}\n')
+
+    with open('outputprec.txt', 'w') as f_prec:
+        for p in prec:
+            f_prec.write(f'{p}\n')
     print('AUC: {}'.format(auc))
     print('F1: {}'.format(f1[best_idx]))
     print('PRECISION: {}'.format(prec[best_idx]))

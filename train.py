@@ -116,7 +116,8 @@ if __name__ == '__main__':
         hidden_dim = 256
         num_layers = 4
         batch_size = 1
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:1")
         whole_data = load_batch_level_dataset()
         n_node_feat = whole_data['n_feat']
         graphs = whole_data['graph']
@@ -125,25 +126,39 @@ if __name__ == '__main__':
         model = model.to(device)
         optimizer = Adam(model.parameters(), lr=lr)
         epoch_iter = tqdm(range(max_epoch))
-        train_loader = (extract_dataloaders(train_index, batch_size))
+        # train_loader = (extract_dataloaders(train_index, batch_size))
+        # for epoch in epoch_iter:
+        #     model.train()
+        #     loss_list = []
+        #     for _, batch in enumerate(train_loader):
+        #         # batch_g = [transform_graph(graphs[idx][0], n_node_feat, n_edge_feat).to(device) for idx in batch]
+        #         batch_g = [graphs[idx][0] for idx in batch]
+        #         batch_g = dgl.batch(batch_g).to(device) 
+        #         batch_g = dgl.add_self_loop(batch_g)
+        #         batch_g.to(device)
+        #         model.train()
+        #         loss = model(batch_g)
+        #         optimizer.zero_grad()
+        #         loss.backward()
+        #         optimizer.step()
+        #         loss_list.append(loss.item())
+        #         del batch_g
+        #     epoch_iter.set_description(f"Epoch {epoch} | train_loss: {np.mean(loss_list):.4f}")
+
+        # torch.save(model.state_dict(), "./checkpoints/checkpoint-wget.pt")
+
         for epoch in epoch_iter:
-            model.train()
-            loss_list = []
-            for _, batch in enumerate(train_loader):
-                # batch_g = [transform_graph(graphs[idx][0], n_node_feat, n_edge_feat).to(device) for idx in batch]
-                batch_g = [graphs[idx][0] for idx in batch]
-                batch_g = dgl.batch(batch_g).to(device) 
-                batch_g = dgl.add_self_loop(batch_g)
-                batch_g.to(device)
+            epoch_loss = 0.0
+            for i in train_index:
+                g = graphs[i][0].to(device)
+                g = dgl.add_self_loop(g)
                 model.train()
-                loss = model(batch_g)
+                loss = model(g)
+                loss /= len(train_index)
                 optimizer.zero_grad()
+                epoch_loss += loss.item()
                 loss.backward()
                 optimizer.step()
-                loss_list.append(loss.item())
-                del batch_g
-            epoch_iter.set_description(f"Epoch {epoch} | train_loss: {np.mean(loss_list):.4f}")
-
-        torch.save(model.state_dict(), "./checkpoints/checkpoint-wget.pt")
-
-
+                del g
+            epoch_iter.set_description(f"Epoch {epoch} | train_loss: {epoch_loss:.4f}")
+        torch.save(model.state_dict(), "./checkpoints/checkpoint-{}.pt".format(dataset))

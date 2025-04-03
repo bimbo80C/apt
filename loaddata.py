@@ -58,7 +58,7 @@ def load_batch_level_dataset():
             data = pkl.load(f)
             label = 1 if i < 25 else 0
             graph_list.append((data, label))
-    node_feature_dim = 16
+    node_feature_dim = 24
     full_dataset = [i for i in range(len(graph_list))]
     train_dataset = [i for i in range(len(graph_list)) if graph_list[i][1] == 0]
 

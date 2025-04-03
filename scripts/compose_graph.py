@@ -1,16 +1,10 @@
-# 这个脚本测试networkx 将子图拼接成为一个整图的操作
-import networkx as nx
-import matplotlib.pyplot as plt
-# 创建两个示例子图
-G1 = nx.Graph()
-G1.add_edges_from([(1, 2), (2, 3)])
-# nx.draw(G1, with_labels=True)
-G2 = nx.Graph()
-G2.add_edges_from([(3, 4), (4, 5)])
-# nx.draw(G2, with_labels=True)
-# 合并子图
-G_combined = nx.compose(G1, G2)
-# 可视化合并后的图
-nx.draw(G_combined, with_labels=True)
-plt.show()
-
+import torch
+src_val_embed = torch.randn(1, 128)  # 源节点嵌入向量
+dst_val_embed = torch.randn(1, 128)  # 目标节点嵌入向量 
+edgetype_embed = torch.randn(1, 128)  # 边类型嵌入向量
+node_embeddings = [src_val_embed, dst_val_embed, edgetype_embed]
+    
+    # 将所有嵌入向量堆叠后求和
+    # 将所有嵌入向量拼接在一起
+sub_g_embedding = torch.cat(node_embeddings, dim=1)
+print(sub_g_embedding.shape)  # 输出嵌入向量的形状
